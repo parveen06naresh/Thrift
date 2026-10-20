@@ -1,0 +1,60 @@
+# Today's flagships behind one endpoint (October 2026).
+#
+#   export ANTHROPIC_API_KEY=... OPENAI_API_KEY=... GEMINI_API_KEY=... XAI_API_KEY=...
+#   thrift-llm serve --config examples/latest.toml
+#
+# Claude IDs and prices below are current (Anthropic pricing page, read 2026-10-20). For the
+# other vendors, run `thrift-llm models openai` (or gemini, xai, ...) and paste the newest IDs:
+# providers rename and retire models every few months, and a config should never guess.
+# Add prices for models Thrift does not know yet under [prices] so the ledger stays exact.
+
+[[tier]]
+name = "haiku"
+provider = "anthropic"
+model = "claude-haiku-5-5"        # $0.10 / $0.50 per 1M tokens (prompts up to 100k)
+
+[[tier]]
+name = "sonnet"
+provider = "anthropic"
+model = "claude-sonnet-5-5"       # $2 / $10
+
+# [[tier]]
+# name = "gpt"
+# provider = "openai"
+# model = "<newest ID from `thrift-llm models openai`>"
+#
+# [[tier]]
+# name = "gemini"
+# provider = "gemini"
+# model = "<newest ID from `thrift-llm models gemini`>"
+#
+# [[tier]]
+# name = "grok"
+# provider = "xai"
+# model = "<newest ID from `thrift-llm models xai`>"
+#
+# [[tier]]
+# name = "sonar"
+# provider = "perplexity"         # live web search answers, never cached
+# model = "sonar-pro"
+
+[[tier]]
+name = "opus"
+provider = "anthropic"
+model = "claude-opus-5-5"         # $4 / $20; cache reads cost 5% of input
+
+[router]
+# The bundled routers were certified on other models. Until you calibrate on your own
+# traffic (`thrift-llm calibrate`), the drift guard below is what keeps routing honest.
+enabled = true
+
+[shadow]
+rate = 0.10
+
+[drift]
+alpha = 0.05
+judge = "llm"
+action = "safe_mode"
+
+[prices]
+# "<model id>" = [input, output]  # USD per 1M tokens

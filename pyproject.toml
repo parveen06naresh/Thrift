@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "thrift-llm"
-version = "0.1.0"
+version = "0.2.0"
 description = "Same answers. Fewer tokens. An OpenAI-compatible LLM gateway that cuts token spend with certified quality."
 readme = "README.md"
 license = { text = "MIT" }

@@ -1,0 +1,58 @@
+# The bundled frontier ladder (certified at epsilon = 2 points on HELM Capabilities v1.15.0).
+# Tier names must match the ladder; models are the ones it was certified for.
+#   thrift-llm serve --config examples/frontier.toml
+
+[[tier]]
+name = "gpt-5-nano"
+provider = "openai"
+model = "gpt-5-nano"
+
+[[tier]]
+name = "gemini-2.5-flash-lite"
+provider = "gemini"
+model = "gemini-2.5-flash-lite"
+
+[[tier]]
+name = "grok-3-mini"
+provider = "xai"
+model = "grok-3-mini"
+
+[[tier]]
+name = "deepseek-v3"
+provider = "deepseek"
+model = "deepseek-chat"
+
+[[tier]]
+name = "gpt-5-mini"
+provider = "openai"
+model = "gpt-5-mini"
+
+[[tier]]
+name = "kimi-k2-instruct"
+provider = "moonshot"
+model = "kimi-k2-instruct"
+
+[[tier]]
+name = "claude-haiku-4-5"
+provider = "anthropic"
+model = "claude-haiku-4-5"
+
+[[tier]]
+name = "gpt-5.1"
+provider = "openai"
+model = "gpt-5.1"
+
+[[tier]]
+name = "gemini-3-pro-preview"     # strongest: the quality reference and default fallback
+provider = "gemini"
+model = "gemini-3-pro-preview"
+
+[router]
+path = "bundled:frontier"
+
+[shadow]
+rate = 0.05
+
+[drift]
+judge = "llm"
+action = "safe_mode"

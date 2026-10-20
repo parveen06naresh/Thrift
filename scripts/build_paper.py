@@ -15,6 +15,7 @@ C = json.load(open("results/compress.json"))
 O = json.load(open("results/overhead.json"))
 LD = json.load(open("results/ladder.json"))["ladders"]
 DR = json.load(open("results/drift.json"))
+FR = json.load(open("results/frontier.json"))
 
 
 def img(name):
@@ -62,6 +63,18 @@ def ladder_rows():
             out.append(f"<tr><td>{name}</td><td>{int(100 * r['eps'])}</td><td>{-100 * r['quality_drop']:+.2f}</td><td><b>{pct(r['cost_saved'], 0)}</b></td>"
                        f"<td>{pct(1 - r['violation_rate'], 0)}</td><td style='font-size:8pt'>{mix}</td></tr>")
     return "".join(out)
+
+
+def frontier_rows():
+    out = []
+    for key, name in [("to_gemini_3_pro", "Gemini 3 Pro"), ("to_claude_sonnet_4_5", "Claude Sonnet 4.5"), ("to_grok_4", "Grok 4")]:
+        for r in FR["ladders"][key]["results"]:
+            out.append(f"<tr><td>{name}</td><td>{int(100 * r['eps'])}</td><td>{-100 * r['quality_drop']:+.2f}</td><td><b>{pct(r['cost_saved'], 0)}</b></td>"
+                       f"<td>{pct(r['off_flagship'], 0)}</td><td>{pct(1 - r['violation_rate'], 0)}</td></tr>")
+    return "".join(out)
+
+
+fg5 = next(r for r in FR["ladders"]["to_claude_sonnet_4_5"]["results"] if r["eps"] == 0.05)
 
 
 def drift_rows():
@@ -120,7 +133,8 @@ distribution-free guarantee that the expected quality loss stays below a user-ch
 On 8,021 HELM Lite questions with real outputs from seven models by five vendors, a certified cost-ordered ladder cuts the GPT-4o
 bill by <b>{pct(lg[0.02]['cost_saved'], 0)}</b> with no measurable accuracy loss (ε = 2 points), versus {pct(g['cost_saved']['mean'], 0)} and a
 {pts(g['quality_drop']['mean'])}-point drop for the best two-model router. A betting e-process re-tests the guarantee online from shadow traffic:
-it caught a silent provider downgrade in {pct(ms20['detected_after_shift'], 0)} of streams (median {ms20['median_delay']:.0f} requests) while its
+on 2025 frontier models (GPT-5.1, Gemini 3 Pro, Grok 4, Claude Sonnet 4.5) the ladder cuts a Claude Sonnet 4.5 bill by
+<b>{pct(fg5['cost_saved'], 0)}</b> while accuracy rises {-100 * fg5['quality_drop']:.1f} points (ε = 5). The drift guard caught a silent provider downgrade in {pct(ms20['detected_after_shift'], 0)} of streams (median {ms20['median_delay']:.0f} requests) while its
 false-alarm probability over the whole stream is at most 5%.
 On Quora Question Pairs, the certified semantic cache serves <b>{pct(np.mean([c['hit_rate'] for c in c2]))}</b> of adversarial
 queries at a <b>{pct(np.mean([c['wrong_rate'] for c in c2]), 2)}</b> wrong-answer rate (α = 2%), six times the exact-match hit rate.
@@ -186,59 +200,71 @@ so by Ville's inequality P(sup<sub>t</sub> K<sub>t</sub> ≥ 1/α) ≤ α: an an
 all auto-routed traffic to the strongest model until the router is re-certified.</p>
 
 <h2>4. Experiments</h2>
-<h3>4.1 Multi-provider ladder</h3>
+<h3>4.1 Frontier models (2025 generation)</h3>
+<p>HELM Capabilities v1.15.0 (Nov 2025) publishes per-question results for GPT-5.1, GPT-5 mini/nano, Gemini 3 Pro, Gemini 2.5
+Flash-Lite, Grok 4, Grok 3 mini, Claude Sonnet 4.5 and Haiku 4.5, DeepSeek-V3 and Kimi K2. We use the {FR['n_questions']:,} questions
+from GPQA, MMLU-Pro, Omni-MATH and IFEval that all eleven answered. HELM's token counts cannot price these runs (some report no output
+tokens; reasoning models report only visible ones), so each model is charged for the same tokens per question at its list price;
+the share of requests kept off the flagship needs no cost model. {FR['splits']} splits, δ = 0.1.</p>
+<table><tr><th>flagship</th><th>ε (pts)</th><th>accuracy vs flagship</th><th>bill saved</th><th>off flagship</th><th>bound held</th></tr>{frontier_rows()}</table>
+<div class="cap">Table 1. Certified ladder over seven cheaper models from five vendors, ending at each flagship.</div>
+<img src="{img('frontier')}">
+<div class="cap">Figure 1. Frontier models alone (grey) and the certified ladder (green). Accuracy rises while cost falls because the best
+model differs question by question.</div>
+
+<h3>4.2 Multi-provider ladder</h3>
 <p>HELM Lite also publishes per-question results for Gemini 1.5 Flash/Pro, DeepSeek-V3, Mistral Large and Claude 3.5 Haiku on the
 same 8,021 questions. Ordered by real cost per question, these form a seven-model ladder ending at GPT-4o (and a five-model ladder
 ending at Claude 3.5 Sonnet). {LD['to_gpt4o']['results'][0]['splits']} random 50/25/25 splits, δ = 0.1.</p>
 <table><tr><th>reference</th><th>ε (pts)</th><th>accuracy vs ref.</th><th>bill saved</th><th>bound held</th><th>traffic mix</th></tr>{ladder_rows()}</table>
-<div class="cap">Table 1. Certified ladder routing on held-out test splits.</div>
+<div class="cap">Table 2. Certified ladder routing on held-out test splits.</div>
 <img src="{img('ladder')}">
-<div class="cap">Figure 1. Single models (grey) and the certified ladder (green). The ladder reaches GPT-4o accuracy at about half its cost.</div>
+<div class="cap">Figure 2. Single models (grey) and the certified ladder (green). The ladder reaches GPT-4o accuracy at about half its cost.</div>
 <p>One caution: always using DeepSeek-V3 is 90% cheaper than GPT-4o and only 0.8 points less accurate on average, but it loses
 to GPT-4o on 6.3% of questions, so it cannot meet a per-question bound of ε ≤ 5 points; the ladder can.</p>
 
-<h3>4.2 Drift guard</h3>
+<h3>4.3 Drift guard</h3>
 <p>The GPT-4o ladder, certified at ε = 0.02, serves streams of 6,000 held-out questions that change at request 2,000: no change; a
 silent downgrade in which the providers behind GPT-4o-mini and DeepSeek-V3 start answering like Llama-3.1-8B; and a topic shift to
 maths, which the ladder never saw. The judge is HELM's per-question metric. 100 streams per row, α = 0.05.</p>
 <table><tr><th>world</th><th>true risk after (pts)</th><th>r</th><th>alarm</th><th>median delay</th><th>risk after: none → guard</th><th>shadow cost</th></tr>{drift_rows()}</table>
-<div class="cap">Table 2. Drift guard. The maths shift is benign: the ladder routes only {pct(DR['worlds']['topic_shift']['cheaper_share_after'], 0)} of maths
+<div class="cap">Table 3. Drift guard. The maths shift is benign: the ladder routes only {pct(DR['worlds']['topic_shift']['cheaper_share_after'], 0)} of maths
 cheaper, so risk stays below ε and silence is correct. One alarm fired before the change in 900 streams.</div>
 
-<h3>4.3 Two-model routing on real model outputs</h3>
+<h3>4.4 Two-model routing on real model outputs</h3>
 <p>HELM Lite v1.13.0 [Liang et al. 2023] publishes per-question prompts, completions, token counts and scores. We take the
 8,021 questions (MMLU, GSM8K, MATH, MedQA, LegalBench, OpenBookQA, NaturalQuestions, NarrativeQA) answered by all of three
 cheap/strong pairs. Costs use each model's real token counts at list prices. Each configuration averages {R['splits']}
 random 50/25/25 train/calibration/test splits; δ = {R['delta']}.</p>
 <table><tr><th>Pair</th><th>ε (pts)</th><th>to cheap</th><th>accuracy drop, pts [p5, p95]</th><th>random, same share</th><th>bill saved</th><th>bound held</th></tr>
 {router_rows()}</table>
-<div class="cap">Table 3. Certified routing on the held-out test split. "Bound held" is the share of splits in which the certified
+<div class="cap">Table 4. Certified routing on the held-out test split. "Bound held" is the share of splits in which the certified
 quantity stayed ≤ ε (target ≥ {pct(1 - R['delta'], 0)}). The one cell below target (Claude, ε = 5) is 35 of 40 overlapping splits.</div>
 <img src="{img('routing')}">
-<div class="cap">Figure 2. Accuracy vs share of traffic sent to the cheap model on one test split. Dots mark the certified operating
+<div class="cap">Figure 3. Accuracy vs share of traffic sent to the cheap model on one test split. Dots mark the certified operating
 points at ε = 2 and 5 points with the measured bill reduction.</div>
 <p>Routing saves more money than its traffic share suggests (41% of the GPT-4o bill from 21% of questions) because the scorer
 learns that long reading-comprehension prompts, the expensive ones, are where the small model already matches the large one.
 Against random routing at the same share, certified routing loses 2–5× less accuracy. The scorer is deliberately small
 (test AUC 0.56–0.73); the oracle curve shows the headroom a stronger scorer could claim under the same guarantee.</p>
 
-<h3>4.4 Semantic cache on adversarial paraphrases</h3>
+<h3>4.5 Semantic cache on adversarial paraphrases</h3>
 <p>Quora Question Pairs contains 404k human-labelled pairs whose non-duplicates were selected to look alike. We cache the first
 question of 10,000 pairs and query with the second; any cached entry may answer, and a hit is correct when both questions are in the
 same duplicate cluster (transitive closure of the labels). Calibration and test workloads share no questions; {len(K['runs'])} draws.</p>
 <table><tr><th>Setting</th><th>served from cache</th><th>wrong answers</th><th>precision of hits</th><th>bound held</th></tr>
 {cache_rows()}</table>
-<div class="cap">Table 4. Exact matching's 0.04% "wrong" rate is QQP label noise. Lookup: {K['shipped_cache']['lookup_ms_p50']:.1f} ms p50
+<div class="cap">Table 5. Exact matching's 0.04% "wrong" rate is QQP label noise. Lookup: {K['shipped_cache']['lookup_ms_p50']:.1f} ms p50
 with {K['shipped_cache']['entries']:,} entries.</div>
 <img src="{img('cache')}" style="width:62%;display:block;margin:0 auto">
-<div class="cap">Figure 3. Hit rate vs wrong-answer rate across fixed thresholds, with and without the key-term guard, and the certified points.</div>
+<div class="cap">Figure 4. Hit rate vs wrong-answer rate across fixed thresholds, with and without the key-term guard, and the certified points.</div>
 
-<h3>4.5 Compression with a real reader</h3>
+<h3>4.6 Compression with a real reader</h3>
 <p>Each of {C['n']} Natural Questions items from HELM Lite gets its gold passage plus {C['k_docs'] - 1} distractor passages, shuffled
 (mean {C['context_tokens_mean']:.0f} o200k tokens), mimicking a retriever's top-10. A BERT-base reader fine-tuned on SQuAD (ONNX Model
 Zoo) answers from the full and compressed contexts; quality is SQuAD F1 against human references (full context: {C['f1_full']:.3f}).</p>
 <table><tr><th>context kept</th><th>Thrift (query-aware)</th><th>truncate</th><th>random sentences</th></tr>{comp_rows()}</table>
-<div class="cap">Table 5. Reader F1 (and share of full-context F1 retained) at equal token budgets.</div>
+<div class="cap">Table 6. Reader F1 (and share of full-context F1 retained) at equal token budgets.</div>
 <img src="{img('compression')}" style="width:62%;display:block;margin:0 auto">
 <p>Certification over 200 random calibration/test halvings ({C['n'] // 2} calibration questions each) is conservative here: at
 ε = 0.02 and 0.05 F1, for both the per-question and the average loss, Learn-then-Test certifies no compression (keep-ratio 1.0 in every
@@ -250,7 +276,7 @@ the bound violated in {pct(cc[0.1]['violation_rate'])} (target ≤ 10%). We esti
 The lossless normalisation stage alone removes {C['normalize_helm']['saved_pct']:.1f}% of tokens from all HELM Lite prompts, which are
 already clean; scraped web pages and PDFs typically carry far more whitespace.</p>
 
-<h3>4.6 Overhead</h3>
+<h3>4.7 Overhead</h3>
 <p>With zero-latency mock upstreams, so that all time is Thrift's own: cache-miss requests add {O['short_prompt_miss']['p50_ms']:.2f} ms
 (p50) / {O['short_prompt_miss']['p99_ms']:.2f} ms (p99); cache hits {O['cache_hit']['p50_ms']:.2f} ms; long-context requests that are compressed
 {O['long_context_compress']['p50_ms']:.1f} ms. One uvicorn worker sustains {O['http']['rps']:.0f} requests/s at concurrency {O['http']['concurrency']}

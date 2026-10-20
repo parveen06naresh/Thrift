@@ -22,6 +22,7 @@ PROVIDERS: dict[str, tuple[str, str, str | None]] = {
     "gemini": ("openai", "https://generativelanguage.googleapis.com/v1beta/openai", "GEMINI_API_KEY"),
     "deepseek": ("openai", "https://api.deepseek.com/v1", "DEEPSEEK_API_KEY"),
     "mistral": ("openai", "https://api.mistral.ai/v1", "MISTRAL_API_KEY"),
+    "moonshot": ("openai", "https://api.moonshot.ai/v1", "MOONSHOT_API_KEY"),
     "groq": ("openai", "https://api.groq.com/openai/v1", "GROQ_API_KEY"),
     "together": ("openai", "https://api.together.xyz/v1", "TOGETHER_API_KEY"),
     "fireworks": ("openai", "https://api.fireworks.ai/inference/v1", "FIREWORKS_API_KEY"),
@@ -29,7 +30,7 @@ PROVIDERS: dict[str, tuple[str, str, str | None]] = {
     "ollama": ("openai", "http://localhost:11434/v1", None),
     "vllm": ("openai", "http://localhost:8000/v1", None),
 }
-ALIASES = {"chatgpt": "openai", "claude": "anthropic", "grok": "xai", "google": "gemini", "sonar": "perplexity"}
+ALIASES = {"chatgpt": "openai", "claude": "anthropic", "grok": "xai", "google": "gemini", "sonar": "perplexity", "kimi": "moonshot"}
 # Providers whose answers come from a live web search: caching them would serve stale news.
 LIVE_PROVIDERS = {"perplexity"}
 
@@ -177,6 +178,28 @@ def from_dict(d: dict) -> Config:
     if cfg.drift.judge_tier and cfg.drift.judge_tier not in names:
         raise ValueError(f"[drift] judge_tier {cfg.drift.judge_tier!r} is not a tier")
     return cfg
+
+
+def parse_spec(spec: str) -> dict:
+    """"provider:model" or "provider:model=name" or "name=provider:model" -> a [[tier]] table."""
+    name = None
+    if "=" in spec:
+        left, right = spec.split("=", 1)
+        if ":" in left:
+            spec, name = left, right
+        else:
+            name, spec = left, right
+    if ":" not in spec:
+        raise ValueError(f"tier spec {spec!r}: expected provider:model, e.g. anthropic:claude-sonnet-5-5")
+    provider, model = spec.split(":", 1)
+    if provider.lower() == "mock":
+        return {"name": name or model, "model": model, "base_url": f"mock://{name or model}"}
+    return {"name": name or model, "model": model, "provider": provider}
+
+
+def from_specs(specs: list[str], **sections) -> Config:
+    """Config from short tier specs, cheapest first: ["openai:gpt-5-mini", "anthropic:claude-sonnet-5-5"]."""
+    return from_dict({"tier": [parse_spec(s) for s in specs], **sections})
 
 
 def load(path: str) -> Config:

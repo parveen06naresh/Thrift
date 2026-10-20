@@ -1,0 +1,643 @@
+{
+ "source": "HELM Capabilities v1.15.0",
+ "splits": 20,
+ "delta": 0.1,
+ "n_questions": 2987,
+ "scenarios": {
+  "gpqa": 446,
+  "ifeval": 541,
+  "mmlu_pro": 1000,
+  "omni_math": 1000
+ },
+ "cost_model": "same tokens for every model: o200k prompt count + Claude Sonnet 4.5 answer length, at each model's list price",
+ "prices": {
+  "gpt-5-nano": [
+   0.05,
+   0.4
+  ],
+  "gemini-2.5-flash-lite": [
+   0.1,
+   0.4
+  ],
+  "grok-3-mini": [
+   0.3,
+   0.5
+  ],
+  "deepseek-v3": [
+   0.27,
+   1.1
+  ],
+  "gpt-5-mini": [
+   0.25,
+   2.0
+  ],
+  "kimi-k2-instruct": [
+   0.6,
+   2.5
+  ],
+  "claude-haiku-4-5": [
+   1.0,
+   5.0
+  ],
+  "gpt-5.1": [
+   1.25,
+   10.0
+  ],
+  "gemini-3-pro-preview": [
+   2.0,
+   12.0
+  ],
+  "grok-4": [
+   3.0,
+   15.0
+  ],
+  "claude-sonnet-4-5": [
+   3.0,
+   15.0
+  ]
+ },
+ "ladders": {
+  "to_gemini_3_pro": {
+   "models": [
+    "gpt-5-nano",
+    "gemini-2.5-flash-lite",
+    "grok-3-mini",
+    "deepseek-v3",
+    "gpt-5-mini",
+    "kimi-k2-instruct",
+    "claude-haiku-4-5",
+    "gpt-5.1",
+    "gemini-3-pro-preview"
+   ],
+   "singles": [
+    {
+     "model": "gpt-5-nano",
+     "accuracy": 0.7136480303537552,
+     "cost_per_1k": 0.23812529293605628,
+     "by_scenario": {
+      "gpqa": 0.679372197309417,
+      "ifeval": 0.9319162045594577,
+      "mmlu_pro": 0.778,
+      "omni_math": 0.5465
+     },
+     "drop_vs_ref": 0.053230666220287826,
+     "clipped_drop_vs_ref": 0.11271063497377526,
+     "cost_saved": 0.9668289132126444
+    },
+    {
+     "model": "gemini-2.5-flash-lite",
+     "accuracy": 0.5333110143957147,
+     "cost_per_1k": 0.24161945095413453,
+     "by_scenario": {
+      "gpqa": 0.3094170403587444,
+      "ifeval": 0.8102279728897104,
+      "mmlu_pro": 0.537,
+      "omni_math": 0.47966666666666663
+     },
+     "drop_vs_ref": 0.23356768217832835,
+     "clipped_drop_vs_ref": 0.26961276643231785,
+     "cost_saved": 0.9663421735747113
+    },
+    {
+     "model": "grok-3-mini",
+     "accuracy": 0.6468586095301863,
+     "cost_per_1k": 0.3142538667559424,
+     "by_scenario": {
+      "gpqa": 0.6748878923766816,
+      "ifeval": 0.9510166358595195,
+      "mmlu_pro": 0.799,
+      "omni_math": 0.31766666666666665
+     },
+     "drop_vs_ref": 0.1200200870438568,
+     "clipped_drop_vs_ref": 0.1648253543131347,
+     "cost_saved": 0.9562241282356232
+    },
+    {
+     "model": "deepseek-v3",
+     "accuracy": 0.6079678607298292,
+     "cost_per_1k": 0.6641040743220623,
+     "by_scenario": {
+      "gpqa": 0.5381165919282511,
+      "ifeval": 0.8324091189155883,
+      "mmlu_pro": 0.723,
+      "omni_math": 0.4026666666666667
+     },
+     "drop_vs_ref": 0.15891083584421384,
+     "clipped_drop_vs_ref": 0.19785738198861735,
+     "cost_saved": 0.9074896512942493
+    },
+    {
+     "model": "gpt-5-mini",
+     "accuracy": 0.8019752259792434,
+     "cost_per_1k": 1.1906264646802809,
+     "by_scenario": {
+      "gpqa": 0.7556053811659192,
+      "ifeval": 0.9269870609981515,
+      "mmlu_pro": 0.835,
+      "omni_math": 0.722
+     },
+     "drop_vs_ref": -0.03509652940520036,
+     "clipped_drop_vs_ref": 0.06634304207119741,
+     "cost_saved": 0.8341445660632218
+    },
+    {
+     "model": "kimi-k2-instruct",
+     "accuracy": 0.7445597589554738,
+     "cost_per_1k": 1.5083744894543019,
+     "by_scenario": {
+      "gpqa": 0.6524663677130045,
+      "ifeval": 0.8502772643253235,
+      "mmlu_pro": 0.819,
+      "omni_math": 0.654
+     },
+     "drop_vs_ref": 0.02231893761856929,
+     "clipped_drop_vs_ref": 0.0997098538109586,
+     "cost_saved": 0.7898819546609119
+    },
+    {
+     "model": "claude-haiku-4-5",
+     "accuracy": 0.6834616672246401,
+     "cost_per_1k": 3.002772346836291,
+     "by_scenario": {
+      "gpqa": 0.6053811659192825,
+      "ifeval": 0.8012939001848429,
+      "mmlu_pro": 0.777,
+      "omni_math": 0.561
+     },
+     "drop_vs_ref": 0.08341702934940298,
+     "clipped_drop_vs_ref": 0.14373395826358668,
+     "cost_saved": 0.5817108678735563
+    },
+    {
+     "model": "gpt-5.1",
+     "accuracy": 0.5843097868541458,
+     "cost_per_1k": 5.953132323401407,
+     "by_scenario": {
+      "gpqa": 0.44170403587443946,
+      "ifeval": 0.9349969192852742,
+      "mmlu_pro": 0.579,
+      "omni_math": 0.4635
+     },
+     "drop_vs_ref": 0.18256890971989725,
+     "clipped_drop_vs_ref": 0.24573150318044862,
+     "cost_saved": 0.17072283031610913
+    },
+    {
+     "model": "gemini-3-pro-preview",
+     "accuracy": 0.7668786965740431,
+     "cost_per_1k": 7.17870036826247,
+     "by_scenario": {
+      "gpqa": 0.8026905829596412,
+      "ifeval": 0.8764633394947627,
+      "mmlu_pro": 0.903,
+      "omni_math": 0.5555
+     },
+     "drop_vs_ref": 0.0,
+     "clipped_drop_vs_ref": 0.0,
+     "cost_saved": 0.0
+    }
+   ],
+   "results": [
+    {
+     "eps": 0.01,
+     "delta": 0.1,
+     "splits": 20,
+     "share": {
+      "gpt-5-nano": 0.006961178045515394,
+      "gemini-2.5-flash-lite": 0.0007362784471218206,
+      "grok-3-mini": 0.001539491298527443,
+      "deepseek-v3": 0.0006024096385542168,
+      "gpt-5-mini": 0.026305220883534135,
+      "kimi-k2-instruct": 0.00428380187416332,
+      "claude-haiku-4-5": 0.0010709504685408298,
+      "gpt-5.1": 0.001472556894243641,
+      "gemini-3-pro-preview": 0.9570281124497994
+     },
+     "quality_drop": -0.00498661311914324,
+     "clipped_drop": 0.002052655064703257,
+     "cost_saved": 0.05145954352779965,
+     "off_flagship": 0.0429718875502008,
+     "violation_rate": 0.05
+    },
+    {
+     "eps": 0.02,
+     "delta": 0.1,
+     "splits": 20,
+     "share": {
+      "gpt-5-nano": 0.03386880856760374,
+      "gemini-2.5-flash-lite": 0.0030120481927710845,
+      "grok-3-mini": 0.009973226238286479,
+      "deepseek-v3": 0.005220883534136547,
+      "gpt-5-mini": 0.09357429718875501,
+      "kimi-k2-instruct": 0.015997322623828646,
+      "claude-haiku-4-5": 0.002008032128514056,
+      "gpt-5.1": 0.004953145917001338,
+      "gemini-3-pro-preview": 0.8313922356091032
+     },
+     "quality_drop": -0.014658634538152627,
+     "clipped_drop": 0.008444890673806337,
+     "cost_saved": 0.19292433780303692,
+     "off_flagship": 0.16860776439089692,
+     "violation_rate": 0.0
+    },
+    {
+     "eps": 0.05,
+     "delta": 0.1,
+     "splits": 20,
+     "share": {
+      "gpt-5-nano": 0.22844712182061583,
+      "gemini-2.5-flash-lite": 0.017603748326639895,
+      "grok-3-mini": 0.0461847389558233,
+      "deepseek-v3": 0.01238286479250335,
+      "gpt-5-mini": 0.20702811244979918,
+      "kimi-k2-instruct": 0.03413654618473895,
+      "claude-haiku-4-5": 0.005287817938420349,
+      "gpt-5.1": 0.00609103078982597,
+      "gemini-3-pro-preview": 0.4428380187416333
+     },
+     "quality_drop": -0.02264614011601963,
+     "clipped_drop": 0.03428157072735387,
+     "cost_saved": 0.5651570848896776,
+     "off_flagship": 0.5571619812583667,
+     "violation_rate": 0.05
+    }
+   ]
+  },
+  "to_claude_sonnet_4_5": {
+   "models": [
+    "gpt-5-nano",
+    "gemini-2.5-flash-lite",
+    "grok-3-mini",
+    "deepseek-v3",
+    "gpt-5-mini",
+    "kimi-k2-instruct",
+    "claude-haiku-4-5",
+    "claude-sonnet-4-5"
+   ],
+   "singles": [
+    {
+     "model": "gpt-5-nano",
+     "accuracy": 0.7136480303537552,
+     "cost_per_1k": 0.23812529293605628,
+     "by_scenario": {
+      "gpqa": 0.679372197309417,
+      "ifeval": 0.9319162045594577,
+      "mmlu_pro": 0.778,
+      "omni_math": 0.5465
+     },
+     "drop_vs_ref": 0.0187479075995981,
+     "clipped_drop_vs_ref": 0.10618234572034371,
+     "cost_saved": 0.9735660621328882
+    },
+    {
+     "model": "gemini-2.5-flash-lite",
+     "accuracy": 0.5333110143957147,
+     "cost_per_1k": 0.24161945095413453,
+     "by_scenario": {
+      "gpqa": 0.3094170403587444,
+      "ifeval": 0.8102279728897104,
+      "mmlu_pro": 0.537,
+      "omni_math": 0.47966666666666663
+     },
+     "drop_vs_ref": 0.19908492355763863,
+     "clipped_drop_vs_ref": 0.24489454301975225,
+     "cost_saved": 0.9731781808002968
+    },
+    {
+     "model": "grok-3-mini",
+     "accuracy": 0.6468586095301863,
+     "cost_per_1k": 0.3142538667559424,
+     "by_scenario": {
+      "gpqa": 0.6748878923766816,
+      "ifeval": 0.9510166358595195,
+      "mmlu_pro": 0.799,
+      "omni_math": 0.31766666666666665
+     },
+     "drop_vs_ref": 0.08553732842316708,
+     "clipped_drop_vs_ref": 0.14278540341479745,
+     "cost_saved": 0.965115141336301
+    },
+    {
+     "model": "deepseek-v3",
+     "accuracy": 0.6079678607298292,
+     "cost_per_1k": 0.6641040743220623,
+     "by_scenario": {
+      "gpqa": 0.5381165919282511,
+      "ifeval": 0.8324091189155883,
+      "mmlu_pro": 0.723,
+      "omni_math": 0.4026666666666667
+     },
+     "drop_vs_ref": 0.12442807722352411,
+     "clipped_drop_vs_ref": 0.167894208235688,
+     "cost_saved": 0.9262787853340753
+    },
+    {
+     "model": "gpt-5-mini",
+     "accuracy": 0.8019752259792434,
+     "cost_per_1k": 1.1906264646802809,
+     "by_scenario": {
+      "gpqa": 0.7556053811659192,
+      "ifeval": 0.9269870609981515,
+      "mmlu_pro": 0.835,
+      "omni_math": 0.722
+     },
+     "drop_vs_ref": -0.06957928802589008,
+     "clipped_drop_vs_ref": 0.05975895547371945,
+     "cost_saved": 0.8678303106644408
+    },
+    {
+     "model": "kimi-k2-instruct",
+     "accuracy": 0.7445597589554738,
+     "cost_per_1k": 1.5083744894543019,
+     "by_scenario": {
+      "gpqa": 0.6524663677130045,
+      "ifeval": 0.8502772643253235,
+      "mmlu_pro": 0.819,
+      "omni_math": 0.654
+     },
+     "drop_vs_ref": -0.012163821002120434,
+     "clipped_drop_vs_ref": 0.07527061711862516,
+     "cost_saved": 0.8325575706681505
+    },
+    {
+     "model": "claude-haiku-4-5",
+     "accuracy": 0.6834616672246401,
+     "cost_per_1k": 3.002772346836291,
+     "by_scenario": {
+      "gpqa": 0.6053811659192825,
+      "ifeval": 0.8012939001848429,
+      "mmlu_pro": 0.777,
+      "omni_math": 0.561
+     },
+     "drop_vs_ref": 0.04893427072871326,
+     "clipped_drop_vs_ref": 0.1037272625823011,
+     "cost_saved": 0.6666666666666666
+    },
+    {
+     "model": "claude-sonnet-4-5",
+     "accuracy": 0.7323959379533533,
+     "cost_per_1k": 9.008317040508873,
+     "by_scenario": {
+      "gpqa": 0.6860986547085202,
+      "ifeval": 0.8496611213801601,
+      "mmlu_pro": 0.869,
+      "omni_math": 0.553
+     },
+     "drop_vs_ref": 0.0,
+     "clipped_drop_vs_ref": 0.0,
+     "cost_saved": 0.0
+    }
+   ],
+   "results": [
+    {
+     "eps": 0.01,
+     "delta": 0.1,
+     "splits": 20,
+     "share": {
+      "gpt-5-nano": 0.011646586345381526,
+      "gemini-2.5-flash-lite": 0.0012717536813922354,
+      "grok-3-mini": 0.003480589022757697,
+      "deepseek-v3": 0.0023427041499330652,
+      "gpt-5-mini": 0.032597054886211514,
+      "kimi-k2-instruct": 0.016666666666666663,
+      "claude-haiku-4-5": 0.006358768406961178,
+      "claude-sonnet-4-5": 0.9256358768406961
+     },
+     "quality_drop": -0.008244087460954935,
+     "clipped_drop": 0.004027219991075413,
+     "cost_saved": 0.08812053981333463,
+     "off_flagship": 0.07436412315930388,
+     "violation_rate": 0.05
+    },
+    {
+     "eps": 0.02,
+     "delta": 0.1,
+     "splits": 20,
+     "share": {
+      "gpt-5-nano": 0.041767068273092366,
+      "gemini-2.5-flash-lite": 0.004685408299866131,
+      "grok-3-mini": 0.015194109772423029,
+      "deepseek-v3": 0.005488621151271754,
+      "gpt-5-mini": 0.08420348058902276,
+      "kimi-k2-instruct": 0.0391566265060241,
+      "claude-haiku-4-5": 0.014257028112449801,
+      "claude-sonnet-4-5": 0.7952476572958501
+     },
+     "quality_drop": -0.020336903168228438,
+     "clipped_drop": 0.010252119589468986,
+     "cost_saved": 0.2192547735681376,
+     "off_flagship": 0.20475234270414994,
+     "violation_rate": 0.05
+    },
+    {
+     "eps": 0.05,
+     "delta": 0.1,
+     "splits": 20,
+     "share": {
+      "gpt-5-nano": 0.21030789825970547,
+      "gemini-2.5-flash-lite": 0.018875502008032126,
+      "grok-3-mini": 0.05441767068273092,
+      "deepseek-v3": 0.014524765729585007,
+      "gpt-5-mini": 0.1990629183400268,
+      "kimi-k2-instruct": 0.06840696117804551,
+      "claude-haiku-4-5": 0.025435073627844713,
+      "claude-sonnet-4-5": 0.4089692101740295
+     },
+     "quality_drop": -0.033746095493083446,
+     "clipped_drop": 0.03729361892012494,
+     "cost_saved": 0.5840109730919101,
+     "off_flagship": 0.5910307898259706,
+     "violation_rate": 0.0
+    }
+   ]
+  },
+  "to_grok_4": {
+   "models": [
+    "gpt-5-nano",
+    "gemini-2.5-flash-lite",
+    "grok-3-mini",
+    "deepseek-v3",
+    "gpt-5-mini",
+    "kimi-k2-instruct",
+    "claude-haiku-4-5",
+    "grok-4"
+   ],
+   "singles": [
+    {
+     "model": "gpt-5-nano",
+     "accuracy": 0.7136480303537552,
+     "cost_per_1k": 0.23812529293605628,
+     "by_scenario": {
+      "gpqa": 0.679372197309417,
+      "ifeval": 0.9319162045594577,
+      "mmlu_pro": 0.778,
+      "omni_math": 0.5465
+     },
+     "drop_vs_ref": 0.0535096529405199,
+     "clipped_drop_vs_ref": 0.10623814306439015,
+     "cost_saved": 0.9735660621328882
+    },
+    {
+     "model": "gemini-2.5-flash-lite",
+     "accuracy": 0.5333110143957147,
+     "cost_per_1k": 0.24161945095413453,
+     "by_scenario": {
+      "gpqa": 0.3094170403587444,
+      "ifeval": 0.8102279728897104,
+      "mmlu_pro": 0.537,
+      "omni_math": 0.47966666666666663
+     },
+     "drop_vs_ref": 0.23384666889856043,
+     "clipped_drop_vs_ref": 0.27106349737752483,
+     "cost_saved": 0.9731781808002968
+    },
+    {
+     "model": "grok-3-mini",
+     "accuracy": 0.6468586095301863,
+     "cost_per_1k": 0.3142538667559424,
+     "by_scenario": {
+      "gpqa": 0.6748878923766816,
+      "ifeval": 0.9510166358595195,
+      "mmlu_pro": 0.799,
+      "omni_math": 0.31766666666666665
+     },
+     "drop_vs_ref": 0.12029907376408888,
+     "clipped_drop_vs_ref": 0.16064055350965295,
+     "cost_saved": 0.965115141336301
+    },
+    {
+     "model": "deepseek-v3",
+     "accuracy": 0.6079678607298292,
+     "cost_per_1k": 0.6641040743220623,
+     "by_scenario": {
+      "gpqa": 0.5381165919282511,
+      "ifeval": 0.8324091189155883,
+      "mmlu_pro": 0.723,
+      "omni_math": 0.4026666666666667
+     },
+     "drop_vs_ref": 0.15918982256444592,
+     "clipped_drop_vs_ref": 0.2024885615444705,
+     "cost_saved": 0.9262787853340753
+    },
+    {
+     "model": "gpt-5-mini",
+     "accuracy": 0.8019752259792434,
+     "cost_per_1k": 1.1906264646802809,
+     "by_scenario": {
+      "gpqa": 0.7556053811659192,
+      "ifeval": 0.9269870609981515,
+      "mmlu_pro": 0.835,
+      "omni_math": 0.722
+     },
+     "drop_vs_ref": -0.03481754268496828,
+     "clipped_drop_vs_ref": 0.0586988059368374,
+     "cost_saved": 0.8678303106644408
+    },
+    {
+     "model": "kimi-k2-instruct",
+     "accuracy": 0.7445597589554738,
+     "cost_per_1k": 1.5083744894543019,
+     "by_scenario": {
+      "gpqa": 0.6524663677130045,
+      "ifeval": 0.8502772643253235,
+      "mmlu_pro": 0.819,
+      "omni_math": 0.654
+     },
+     "drop_vs_ref": 0.022597924338801367,
+     "clipped_drop_vs_ref": 0.1066287244727151,
+     "cost_saved": 0.8325575706681505
+    },
+    {
+     "model": "claude-haiku-4-5",
+     "accuracy": 0.6834616672246401,
+     "cost_per_1k": 3.002772346836291,
+     "by_scenario": {
+      "gpqa": 0.6053811659192825,
+      "ifeval": 0.8012939001848429,
+      "mmlu_pro": 0.777,
+      "omni_math": 0.561
+     },
+     "drop_vs_ref": 0.08369601606963506,
+     "clipped_drop_vs_ref": 0.14964847673250753,
+     "cost_saved": 0.6666666666666666
+    },
+    {
+     "model": "grok-4",
+     "accuracy": 0.7671576832942751,
+     "cost_per_1k": 9.008317040508873,
+     "by_scenario": {
+      "gpqa": 0.726457399103139,
+      "ifeval": 0.9491682070240296,
+      "mmlu_pro": 0.851,
+      "omni_math": 0.603
+     },
+     "drop_vs_ref": 0.0,
+     "clipped_drop_vs_ref": 0.0,
+     "cost_saved": 0.0
+    }
+   ],
+   "results": [
+    {
+     "eps": 0.01,
+     "delta": 0.1,
+     "splits": 20,
+     "share": {
+      "gpt-5-nano": 0.008433734939759036,
+      "gemini-2.5-flash-lite": 0.0004016064257028112,
+      "grok-3-mini": 0.004685408299866132,
+      "deepseek-v3": 0.0008032128514056224,
+      "gpt-5-mini": 0.03815261044176707,
+      "kimi-k2-instruct": 0.0068942436412315925,
+      "claude-haiku-4-5": 0.001004016064257028,
+      "grok-4": 0.9396251673360105
+     },
+     "quality_drop": -0.00400490852298081,
+     "clipped_drop": 0.002744310575635877,
+     "cost_saved": 0.0735001542468955,
+     "off_flagship": 0.0603748326639893,
+     "violation_rate": 0.1
+    },
+    {
+     "eps": 0.02,
+     "delta": 0.1,
+     "splits": 20,
+     "share": {
+      "gpt-5-nano": 0.035609103078982594,
+      "gemini-2.5-flash-lite": 0.0012717536813922354,
+      "grok-3-mini": 0.02208835341365462,
+      "deepseek-v3": 0.00394912985274431,
+      "gpt-5-mini": 0.1136546184738956,
+      "kimi-k2-instruct": 0.01921017402945114,
+      "claude-haiku-4-5": 0.0022088353413654616,
+      "grok-4": 0.8020080321285141
+     },
+     "quality_drop": -0.008433734939759024,
+     "clipped_drop": 0.01112226684515841,
+     "cost_saved": 0.2225376702209258,
+     "off_flagship": 0.19799196787148593,
+     "violation_rate": 0.05
+    },
+    {
+     "eps": 0.05,
+     "delta": 0.1,
+     "splits": 20,
+     "share": {
+      "gpt-5-nano": 0.21218206157965191,
+      "gemini-2.5-flash-lite": 0.009839357429718875,
+      "grok-3-mini": 0.07095046854083,
+      "deepseek-v3": 0.009437751004016063,
+      "gpt-5-mini": 0.23647925033467204,
+      "kimi-k2-instruct": 0.03259705488621151,
+      "claude-haiku-4-5": 0.0048862115127175365,
+      "grok-4": 0.423627844712182
+     },
+     "quality_drop": -0.01031905399375278,
+     "clipped_drop": 0.03528558679161089,
+     "cost_saved": 0.5817102100065062,
+     "off_flagship": 0.5763721552878179,
+     "violation_rate": 0.1
+    }
+   ]
+  }
+ }
+}

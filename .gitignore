@@ -12,3 +12,4 @@ data/qqp.tsv
 thrift-shadow.jsonl
 thrift.toml
 results/.compress_rows.jsonl
+data/helm_cap/

@@ -1,27 +1,72 @@
-# Thrift: same answers, fewer tokens
+<div align="center">
 
-**One OpenAI-compatible endpoint for ChatGPT, Claude, Gemini, Grok, Perplexity, DeepSeek,
-Mistral and self-hosted models that cuts token spend four ways (a semantic cache, query-aware
-prompt compression, routing each question to the cheapest model that can answer it, and
-provider prompt caching) and puts a statistical guarantee on how much quality each one is
-allowed to cost, with a live drift guard that notices when that guarantee stops holding.**
+# Thrift
+
+### Same answers. Fewer tokens.
+
+**One endpoint for Claude, GPT, Gemini, Grok, Perplexity, DeepSeek, Kimi and Mistral that sends
+every request to the cheapest model that can answer it, and *proves* how much quality that costs.**
 
 [![CI](https://github.com/parveen06naresh/thrift/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
-[Paper (PDF)](docs/paper/thrift.pdf) · [Results](results/) · [Benchmarks](#reproduce-every-number)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+[![Paper](https://img.shields.io/badge/paper-PDF-b31b1b)](docs/paper/thrift.pdf)
 
-Point any OpenAI SDK at Thrift and change nothing else. Every number below comes from a
-real run in this repo, on real model outputs, with no API key needed to reproduce it.
+</div>
 
-| Mechanism | Measured on | Result |
-|---|---|---|
-| **Multi-provider routing** | 8,021 HELM Lite questions, real answers from 7 models by 5 vendors | **46% below GPT-4o's bill at the same accuracy**; 75% for a 0.9-point drop; certified |
-| **Two-model routing** | same questions, GPT-4o-mini and GPT-4o | **41% lower bill** for a **0.7-point** accuracy drop, certified at ≤ 2 points |
-| **Drift guard** | a provider silently downgrades two models mid-stream | caught in **99%** of streams (median 1396 requests), 1 false alarm in 900 streams while the risk was under ε (the promise is ≤ 5%) |
-| **Semantic cache** | Quora Question Pairs (adversarial near-duplicates) | **6x more cache hits** than exact matching, wrong answers certified ≤ 2% |
-| **Compression** | Natural Questions with 10 retrieved passages, real BERT reader | keeps **97.6%** of reader F1 at **25%** of the context (truncation keeps 27%) |
-| **Overhead** | in-process, mock upstream | **1.3 ms** p50 added per request; cache hits 0.08 ms |
+```python
+pip install "thrift-llm[tiktoken]"
 
-![Multi-provider routing](docs/figures/ladder.png)
+from thrift_llm import Thrift
+client = Thrift("openai:gpt-5-mini", "anthropic:claude-opus-5-5")   # cheapest first, strongest last
+r = client.chat.completions.create(model="thrift-auto", messages=[{"role": "user", "content": "Why is the sky blue?"}])
+print(r.choices[0].message.content, r.thrift["x-thrift-tier"], r.thrift["x-thrift-cost-usd"])
+```
+
+Same call shape as the OpenAI SDK, in-process, no server. Or run it as a proxy and point any
+OpenAI client, LangChain or LlamaIndex app at it: `thrift-llm serve --tier openai:gpt-5-mini --tier anthropic:claude-opus-5-5`.
+
+## What it does to your bill
+
+Measured on the newest public per-question results (Stanford HELM Capabilities, Nov 2025: GPQA,
+MMLU-Pro, Omni-MATH, IFEval), with real answers from 11 frontier models by 6 vendors:
+
+| If your app runs on | Thrift's bill | Accuracy | Quality promise (certified) |
+|---|---|---|---|
+| **Gemini 3 Pro** | **−57%** | +2.3 pts | loses ≤ 5 pts, P ≥ 90% |
+| **Claude Sonnet 4.5** | **−58%** | +3.4 pts | loses ≤ 5 pts, P ≥ 90% |
+| **Grok 4** | **−58%** | +1.0 pts | loses ≤ 5 pts, P ≥ 90% |
+| Gemini 3 Pro / Claude Sonnet 4.5 / Grok 4, stricter | −19% / −22% / −22% | +1.5 / +2.0 / +0.8 pts | loses ≤ 2 pts |
+
+Accuracy went *up* because, question by question, another vendor's cheaper model is often the
+better one. Costs charge every model the same tokens at its list price (reasoning models' hidden
+thinking tokens are not counted; see [Honest limitations](#honest-limitations)).
+
+| Also measured | Result |
+|---|---|
+| 8,021 HELM Lite questions, 7 models by 5 vendors | **46% below GPT-4o** at the same accuracy |
+| Drift guard: a provider silently downgrades two models | caught in **99%** of streams, 1 false alarm in 900 |
+| Semantic cache on Quora Question Pairs | **6x** the hits of exact matching, wrong answers ≤ 2% (certified) |
+| Compression on 10-passage RAG prompts, real reader | **97.6%** of answer quality at **25%** of the tokens |
+| Overhead | **1.3 ms** per request (p50) |
+
+![Frontier routing](docs/figures/frontier.png)
+
+### How it compares
+
+| | Thrift | LiteLLM | RouteLLM | GPTCache |
+|---|---|---|---|---|
+| One API for many providers | ✓ (14 presets, native Claude) | ✓ (100+) | | |
+| Routes each request by difficulty | ✓ across N models | | ✓ two models | |
+| Semantic cache | ✓ with key-term guard | ✓ | | ✓ |
+| Prompt compression | ✓ | | | |
+| **Statistical quality guarantee** | **✓ for every knob** | | | |
+| **Live drift detection** | **✓ anytime-valid** | | | |
+| Cost ledger, dashboard, Prometheus | ✓ | ✓ | | |
+
+LiteLLM is the broader proxy (more providers, budgets, teams). Thrift is narrower and stricter:
+its job is to cut the bill without letting quality slip unnoticed, and it can sit behind or in
+front of LiteLLM.
 
 ---
 
@@ -48,8 +93,9 @@ to quality.
 ## Quickstart
 
 ```bash
-pip install -e ".[tiktoken]"          # Python 3.10+
+pip install "thrift-llm[tiktoken]"    # Python 3.10+ (from source: pip install -e ".[tiktoken]")
 thrift-llm demo                       # offline: mock models, replayed traffic, live dashboard
+thrift-llm models anthropic           # the model IDs a provider serves today, with known prices
 ```
 
 With real models:
@@ -135,7 +181,55 @@ whole, unbounded stream is at most α (default 5%). When it fires, Thrift enters
 
 ## Results
 
-### 1. Multi-provider routing: the cheapest model that can answer
+### 1. Frontier models (2025 generation): GPT-5.1, Gemini 3 Pro, Grok 4, Claude 4.5
+
+[HELM Capabilities v1.15.0](https://crfm.stanford.edu/helm/capabilities/) (Stanford CRFM, Nov 2025) is
+the newest public release with every prompt, answer and score per model. Thrift's ladder is
+trained, certified and tested on 2,987 of those questions (GPQA 446, MMLU-Pro
+1000, Omni-MATH 1000, IFEval 541), 20 random 50/25/25 splits. Script:
+[scripts/eval_frontier.py](scripts/eval_frontier.py).
+
+| Model | Accuracy | Cost per 1,000 questions* |
+|---|---|---|
+| gpt-5-nano | 71.4% | $0.24 |
+| gemini-2.5-flash-lite | 53.3% | $0.24 |
+| grok-3-mini | 64.7% | $0.31 |
+| deepseek-v3 | 60.8% | $0.66 |
+| gpt-5-mini | 80.2% | $1.19 |
+| kimi-k2-instruct | 74.5% | $1.51 |
+| claude-haiku-4-5 | 68.3% | $3.00 |
+| gpt-5.1 | 58.4% | $5.95 |
+| gemini-3-pro-preview | 76.7% | $7.18 |
+| claude-sonnet-4-5 | 73.2% | $9.01 |
+| grok-4 | 76.7% | $9.01 |
+
+| Your flagship | ε | Accuracy vs flagship | Bill saved* | Requests kept off the flagship | Bound held | Traffic mix |
+|---|---|---|---|---|---|---|
+| Gemini 3 Pro | 1 pt | +0.50 pts | **5%** | 4% | 95% | gpt-5-mini 3%, gemini-3-pro-preview 96% |
+| Gemini 3 Pro | 2 pts | +1.47 pts | **19%** | 17% | 100% | gpt-5-nano 3%, gpt-5-mini 9%, gemini-3-pro-preview 83% |
+| Gemini 3 Pro | 5 pts | +2.26 pts | **57%** | 56% | 95% | gpt-5-nano 23%, grok-3-mini 5%, gpt-5-mini 21%, kimi-k2-instruct 3%, gemini-3-pro-preview 44% |
+| Claude Sonnet 4.5 | 1 pt | +0.82 pts | **9%** | 7% | 95% | gpt-5-mini 3%, claude-sonnet-4-5 93% |
+| Claude Sonnet 4.5 | 2 pts | +2.03 pts | **22%** | 20% | 95% | gpt-5-nano 4%, gpt-5-mini 8%, kimi-k2-instruct 4%, claude-sonnet-4-5 80% |
+| Claude Sonnet 4.5 | 5 pts | +3.37 pts | **58%** | 59% | 100% | gpt-5-nano 21%, grok-3-mini 5%, gpt-5-mini 20%, kimi-k2-instruct 7%, claude-haiku-4-5 3%, claude-sonnet-4-5 41% |
+| Grok 4 | 1 pt | +0.40 pts | **7%** | 6% | 90% | gpt-5-mini 4%, grok-4 94% |
+| Grok 4 | 2 pts | +0.84 pts | **22%** | 20% | 95% | gpt-5-nano 4%, grok-3-mini 2%, gpt-5-mini 11%, grok-4 80% |
+| Grok 4 | 5 pts | +1.03 pts | **58%** | 58% | 90% | gpt-5-nano 21%, grok-3-mini 7%, gpt-5-mini 24%, kimi-k2-instruct 3%, grok-4 42% |
+
+\* HELM's token counts cannot be used for cost here (Gemini and DeepSeek runs report no output
+tokens; reasoning models report only visible tokens), so every model is charged for the same
+tokens on each question (the prompt plus Claude Sonnet 4.5's full answer length) at its list
+price. That compares prices, not verbosity. "Requests kept off the flagship" needs no cost
+model at all. Two surprises in the data, reported as measured: GPT-5 mini scores highest on
+these reasoning-heavy sets, and GPT-5.1 scores low (HELM appears to have run it without
+extended reasoning).
+
+The honest reading: on these four benchmarks GPT-5 mini *alone* beats every flagship on average
+and costs about 87% less. Thrift still will not certify it at ε = 5, because it gets 6% of the
+questions the flagship answers correctly wrong, and the certificate bounds those per-question
+losses, not the average. The ladder is the conservative choice; if your own calibration data
+looks like this, the calibration report tells you a cheaper default is safe to try.
+
+### 1b. More vendors on the same questions (2024 generation)
 
 The ladder orders models by cost (Gemini 1.5 Flash → GPT-4o-mini → DeepSeek-V3 → Claude 3.5
 Haiku → Gemini 1.5 Pro → Mistral Large → GPT-4o). One scorer per cheaper model predicts
@@ -310,6 +404,8 @@ pip install -e ".[dev,eval]"
 python scripts/fetch_helm.py --multi  # HELM Lite per-question results, 11 models (public GCS bucket)
 python scripts/eval_router.py       # results/router.json, ships thrift_llm/data/router_helm.json
 python scripts/eval_ladder.py       # results/ladder.json, ships thrift_llm/data/ladder_helm.json
+python scripts/fetch_helm_capabilities.py  # HELM Capabilities v1.15.0, 11 frontier models (~450 MB)
+python scripts/eval_frontier.py     # results/frontier.json, ships thrift_llm/data/ladder_frontier.json
 python scripts/eval_drift.py        # results/drift.json
 python scripts/eval_cache.py        # downloads QQP, results/cache.json
 python scripts/eval_compress.py     # downloads the ONNX BERT reader, results/compress.json
@@ -327,10 +423,16 @@ pytest -q                           # 43 tests
 * **Guarantees are about averages over exchangeable traffic.** The drift guard detects
   when that stops holding, but it needs shadow traffic (which costs money) and a judge; an
   LLM judge is itself noisy. Detection takes on the order of a thousand requests at r = 20%.
-* **Grok and Perplexity are wired in and unit-tested against their API formats, but not
-  benchmarked**: HELM Lite has no published results for them, and no API calls were made
-  from this repo. The HELM models (2024 generation) are older than today's flagships; the
-  method carries over, the bundled ladder's numbers do not. Re-certify for your models.
+* **The newest benchmarked models are the late-2025 generation** (GPT-5.1, Gemini 3 Pro,
+  Grok 4, Claude Sonnet 4.5). Today's flagships (Claude Opus 5.5 and the newest GPT, Gemini and Grok releases)
+  have no public per-question results yet, and this repo makes no paid API calls. Thrift
+  supports them (Claude 5 prices are built in; `thrift-llm models <provider>` lists live IDs),
+  but their savings must be certified on your own traffic: `thrift-llm calibrate`, with the
+  drift guard on meanwhile. Perplexity is supported but not benchmarked.
+* **Frontier costs ignore hidden reasoning tokens.** GPT-5-family, Gemini 3 Pro and Grok
+  models think before answering and bill for it; Thrift's ledger counts those from live usage,
+  but the offline benchmark cannot, so savings when routing *to* reasoning models are
+  overstated and savings when routing *away from* them are understated.
 * **The default cache embedding is lexical.** It catches rephrasings, not synonyms. A
   learned embedding plugs in through `SemanticCache(embedder=...)` and gets certified the
   same way. QQP is adversarial, so hit rates on ordinary traffic with real repetition are

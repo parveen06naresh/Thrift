@@ -106,12 +106,40 @@ def _serve(cfg, open_browser: bool = False) -> None:
 def cmd_serve(a) -> None:
     from . import config
 
-    cfg = config.demo_config() if a.demo else config.load(a.config)
+    if a.demo:
+        cfg = config.demo_config()
+    elif a.tier:
+        cfg = config.from_specs(a.tier)
+    else:
+        cfg = config.load(a.config)
     if a.port:
         cfg.port = a.port
     if a.host:
         cfg.host = a.host
     _serve(cfg)
+
+
+def cmd_models(a) -> None:
+    """Ask the provider which models exist today, so configs never pin a retired ID."""
+    import httpx
+
+    from .config import Tier
+
+    t = Tier(name="probe", model="-", provider=a.provider)
+    key = t.key()
+    if t.api_key_env and not key:
+        sys.exit(f"set {t.api_key_env} first")
+    h = {"x-api-key": key, "anthropic-version": "2023-06-01"} if t.api_style == "anthropic" else ({"authorization": f"Bearer {key}"} if key else {})
+    r = httpx.get(t.base_url.rstrip("/") + "/models", headers=h, timeout=30)
+    if r.status_code != 200:
+        sys.exit(f"{t.provider}: HTTP {r.status_code} {r.text[:300]}")
+    ids = sorted({m.get("id", "").removeprefix("models/") for m in r.json().get("data") or r.json().get("models") or []} - {""})
+    from .pricing import PriceBook
+
+    pb = PriceBook()
+    for i in ids:
+        p = pb.lookup(i)
+        print(f"{i:48s} {f'${p[0]:.2f} / ${p[1]:.2f} per 1M' if p else 'price unknown: add it under [prices]'}")
 
 
 def demo_prompts() -> list[str]:
@@ -218,6 +246,8 @@ def main(argv=None) -> None:
     s = sub.add_parser("serve", help="run the gateway")
     s.add_argument("--config", default="thrift.toml")
     s.add_argument("--demo", action="store_true", help="use offline mock tiers (no API key needed)")
+    s.add_argument("--tier", action="append", metavar="PROVIDER:MODEL",
+                   help="quick setup without a config file, cheapest first; repeat, e.g. --tier openai:gpt-5-mini --tier anthropic:claude-sonnet-5-5")
     s.add_argument("--host")
     s.add_argument("--port", type=int)
     s.set_defaults(fn=cmd_serve)
@@ -241,6 +271,10 @@ def main(argv=None) -> None:
     k = sub.add_parser("compress", help="compress text from stdin")
     k.add_argument("--keep", type=float, default=0.5)
     k.set_defaults(fn=cmd_compress)
+    m = sub.add_parser("models", help="list the model IDs a provider serves right now (uses your API key)")
+    m.add_argument("provider", help="openai, anthropic, xai, gemini, deepseek, mistral, perplexity, ...")
+    m.set_defaults(fn=cmd_models)
+
     i = sub.add_parser("init", help="write an example thrift.toml")
     i.add_argument("--out", default="thrift.toml")
     i.set_defaults(fn=cmd_init)

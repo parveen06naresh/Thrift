@@ -7,6 +7,30 @@ whatever table it is given and never guesses: an unknown model is priced at 0 an
 from __future__ import annotations
 
 PRICES: dict[str, tuple[float, float]] = {
+    # Anthropic Claude 5 (current; platform.claude.com pricing page, read 2026-10-20). Haiku 5.5: prompts <= 100k tokens.
+    "claude-fable-5-1": (10.00, 50.00),
+    "claude-opus-5-5": (4.00, 20.00),
+    "claude-sonnet-5-5": (2.00, 10.00),
+    "claude-haiku-5-5": (0.10, 0.50),
+    # Models in the HELM Capabilities benchmark (v1.15.0, Nov 2025), list prices at that time
+    "gpt-5.1-2025-11-13": (1.25, 10.00),
+    "gpt-5.1": (1.25, 10.00),
+    "gpt-5-2025-08-07": (1.25, 10.00),
+    "gpt-5-mini-2025-08-07": (0.25, 2.00),
+    "gpt-5-mini": (0.25, 2.00),
+    "gpt-5-nano-2025-08-07": (0.05, 0.40),
+    "gpt-5-nano": (0.05, 0.40),
+    "claude-sonnet-4-5-20250929": (3.00, 15.00),
+    "claude-sonnet-4-5": (3.00, 15.00),
+    "claude-haiku-4-5-20251001": (1.00, 5.00),
+    "claude-haiku-4-5": (1.00, 5.00),
+    "gemini-3-pro-preview": (2.00, 12.00),
+    "gemini-2.5-flash-lite": (0.10, 0.40),
+    "grok-4-0709": (3.00, 15.00),
+    "grok-4": (3.00, 15.00),
+    "grok-3-mini-beta": (0.30, 0.50),
+    "grok-3-mini": (0.30, 0.50),
+    "kimi-k2-instruct": (0.60, 2.50),
     # OpenAI
     "gpt-4o": (2.50, 10.00),
     "gpt-4o-2024-08-06": (2.50, 10.00),
@@ -39,7 +63,11 @@ PRICES: dict[str, tuple[float, float]] = {
 # written to the cache), by model-name prefix. Unlisted models get no discount, so savings are
 # never overstated. Usage fields are normalised to OpenAI's prompt_tokens_details.cached_tokens.
 CACHE_MULT: list[tuple[str, float, float]] = [
-    ("claude", 0.10, 1.25),  # Anthropic: reads 10%, 5-minute writes 125%
+    ("claude-opus-5", 0.05, 1.25),  # Claude 5: cache reads 5% (Fable 2.5%), 5-minute writes 125%
+    ("claude-sonnet-5", 0.05, 1.25),
+    ("claude-haiku-5", 0.10, 1.25),
+    ("claude-fable-5", 0.025, 1.25),
+    ("claude", 0.10, 1.25),  # earlier Claude: reads 10%, 5-minute writes 125%
     ("gpt-4o", 0.50, 1.0),
     ("gpt-4.1", 0.25, 1.0),
     ("deepseek", 0.10, 1.0),

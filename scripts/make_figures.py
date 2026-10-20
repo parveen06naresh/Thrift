@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 
 import matplotlib
+import matplotlib.ticker
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
@@ -115,8 +116,39 @@ def ladder():
     fig.savefig("docs/figures/ladder.png", bbox_inches="tight")
 
 
+def frontier():
+    F = json.load(open("results/frontier.json"))["ladders"]
+    fig, axes = plt.subplots(1, 3, figsize=(13, 3.7), sharey=True)
+    for ax, (key, title) in zip(axes, [("to_gemini_3_pro", "reference: Gemini 3 Pro"), ("to_claude_sonnet_4_5", "reference: Claude Sonnet 4.5"),
+                                         ("to_grok_4", "reference: Grok 4")]):
+        d = F[key]
+        ref = d["singles"][-1]
+        for s in d["singles"]:
+            ax.scatter([s["cost_per_1k"]], [100 * s["accuracy"]], color=MUTED, s=20, zorder=3)
+            ax.annotate(s["model"].replace("-preview", "").replace("-instruct", ""), (s["cost_per_1k"], 100 * s["accuracy"]),
+                        textcoords="offset points", xytext=(4, -10), fontsize=7, color=MUTED)
+        xs = [ref["cost_per_1k"] * (1 - r["cost_saved"]) for r in d["results"]]
+        ys = [100 * (ref["accuracy"] - r["quality_drop"]) for r in d["results"]]
+        ax.plot(xs, ys, color=ACC, lw=2, marker="o", ms=5, label="Thrift ladder (certified)", zorder=4)
+        for r, x, y in zip(d["results"], xs, ys):
+            if r["eps"] == 0.01:
+                continue
+            ax.annotate(f"ε={int(100 * r['eps'])}: −{100 * r['cost_saved']:.0f}%", (x, y), textcoords="offset points",
+                        xytext=(0, 10) if r["eps"] == 0.05 else (-6, -16), ha="center" if r["eps"] == 0.05 else "right", fontsize=8, color=INK)
+        ax.set_xscale("log")
+        ax.set_xticks([0.3, 1, 3, 10])
+        ax.set_xticklabels(["$0.3", "$1", "$3", "$10"])
+        ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+        ax.set_xlabel("cost per 1,000 questions (USD, log)")
+        ax.set_title(title, fontsize=9.5, color=INK)
+    axes[0].set_ylabel("accuracy (%)")
+    axes[0].legend(frameon=False, fontsize=8, loc="lower right")
+    fig.tight_layout()
+    fig.savefig("docs/figures/frontier.png", bbox_inches="tight")
+
+
 if __name__ == "__main__":
-    for f in (routing, cache, compression, ladder):
+    for f in (routing, cache, compression, ladder, frontier):
         try:
             f()
             print("ok", f.__name__)

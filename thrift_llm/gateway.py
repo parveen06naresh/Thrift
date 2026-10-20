@@ -73,7 +73,7 @@ class Result:
     status: int = 200
 
 
-BUNDLED = {"helm": "data/router_helm.json", "ladder": "data/ladder_helm.json"}
+BUNDLED = {"helm": "data/router_helm.json", "ladder": "data/ladder_helm.json", "frontier": "data/ladder_frontier.json"}
 
 
 def bundled_router(name: str = "helm") -> Router | Ladder | None:
@@ -114,6 +114,12 @@ class Gateway:
                     raise ValueError(f"router ladder names tiers {missing} that are not in the config")
             if self.router is not None and cfg.router.threshold is not None:
                 self.router.threshold = cfg.router.threshold
+            if isinstance(self.router, Router) and not p and self.router.meta.get("cheap"):
+                m = self.router.meta
+                if not (m["cheap"].startswith(cfg.cheap.model) and m["strong"].startswith(cfg.strong.model)):
+                    log.warning("thrift: the bundled router was certified for %s -> %s, not %s -> %s. Its guarantee does not "
+                                "transfer; run `thrift-llm calibrate` on your traffic and enable [shadow] so the drift guard "
+                                "watches routing meanwhile.", m["cheap"], m["strong"], cfg.cheap.model, cfg.strong.model)
         self.monitor = None
         d = cfg.drift
         if d.enabled and cfg.shadow_rate > 0 and self.router is not None:

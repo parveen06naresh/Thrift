@@ -1,0 +1,29 @@
+# docker compose up  ->  gateway on :8787 (dashboard at /dashboard), Prometheus on :9090
+services:
+  thrift:
+    build: .
+    ports: ["8787:8787"]
+    volumes: ["./thrift.toml:/app/thrift.toml:ro", "thrift-data:/data"]
+    environment:
+      - OPENAI_API_KEY
+      - ANTHROPIC_API_KEY
+      - GEMINI_API_KEY
+      - XAI_API_KEY
+      - PERPLEXITY_API_KEY
+      - DEEPSEEK_API_KEY
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    ports: ["9090:9090"]
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    configs:
+      - source: prom
+        target: /etc/prometheus/prometheus.yml
+volumes:
+  thrift-data: {}
+configs:
+  prom:
+    content: |
+      scrape_configs:
+        - job_name: thrift
+          scrape_interval: 15s
+          static_configs: [{targets: ["thrift:8787"]}]
