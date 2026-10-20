@@ -1,0 +1,154 @@
+{
+ "n": 240,
+ "k_docs": 10,
+ "reader": "bertsquad-12 (BERT-base, SQuAD v1.1)",
+ "tokenizer": "tiktoken/o200k_base",
+ "context_tokens_mean": 2031.2166666666667,
+ "f1_full": 0.5527120567260222,
+ "by_ratio": [
+  {
+   "keep_ratio": 0.6,
+   "actual_kept": 0.5907536957740495,
+   "thrift": {
+    "f1": 0.5410196854428582,
+    "retained": 0.9788454564345429,
+    "mean_loss": 0.057394887720974674,
+    "answers_changed_worse": 0.09166666666666666
+   },
+   "truncate": {
+    "f1": 0.3099414750061596,
+    "retained": 0.5607648163893713,
+    "mean_loss": 0.25241343886271983
+   },
+   "random": {
+    "f1": 0.41348643213476544,
+    "retained": 0.7481046000408301,
+    "mean_loss": 0.20425865225200185
+   }
+  },
+  {
+   "keep_ratio": 0.4,
+   "actual_kept": 0.3968415119921667,
+   "thrift": {
+    "f1": 0.5357909162545301,
+    "retained": 0.9693852517498459,
+    "mean_loss": 0.07435476862107297,
+    "answers_changed_worse": 0.1125
+   },
+   "truncate": {
+    "f1": 0.2294277785576805,
+    "retained": 0.415094579113564,
+    "mean_loss": 0.3441969765810402
+   },
+   "random": {
+    "f1": 0.29408390374528526,
+    "retained": 0.5320743417237627,
+    "mean_loss": 0.3094581282433103
+   }
+  },
+  {
+   "keep_ratio": 0.25,
+   "actual_kept": 0.24797937985280072,
+   "thrift": {
+    "f1": 0.5392898300053621,
+    "retained": 0.9757156976090474,
+    "mean_loss": 0.07668949697881923,
+    "answers_changed_worse": 0.13333333333333333
+   },
+   "truncate": {
+    "f1": 0.14987661028884433,
+    "retained": 0.27116580589291855,
+    "mean_loss": 0.4103394146911462
+   },
+   "random": {
+    "f1": 0.27483108943645596,
+    "retained": 0.49724098848939885,
+    "mean_loss": 0.33048696144161305
+   }
+  }
+ ],
+ "certified": [
+  {
+   "loss": "per_question",
+   "eps": 0.02,
+   "delta": 0.1,
+   "splits": 200,
+   "chosen_ratio_counts": {
+    "1.0": 200
+   },
+   "median_ratio": 1.0,
+   "test_loss_mean": 0.0,
+   "violation_rate": 0.0
+  },
+  {
+   "loss": "per_question",
+   "eps": 0.05,
+   "delta": 0.1,
+   "splits": 200,
+   "chosen_ratio_counts": {
+    "1.0": 200
+   },
+   "median_ratio": 1.0,
+   "test_loss_mean": 0.0,
+   "violation_rate": 0.0
+  },
+  {
+   "loss": "per_question",
+   "eps": 0.1,
+   "delta": 0.1,
+   "splits": 200,
+   "chosen_ratio_counts": {
+    "0.25": 1,
+    "0.4": 3,
+    "0.6": 43,
+    "1.0": 153
+   },
+   "median_ratio": 1.0,
+   "test_loss_mean": 0.018199472244980558,
+   "violation_rate": 0.02
+  },
+  {
+   "loss": "average",
+   "eps": 0.02,
+   "delta": 0.1,
+   "splits": 200,
+   "chosen_ratio_counts": {
+    "1.0": 200
+   },
+   "median_ratio": 1.0,
+   "test_loss_mean": 0.0,
+   "violation_rate": 0.0
+  },
+  {
+   "loss": "average",
+   "eps": 0.05,
+   "delta": 0.1,
+   "splits": 200,
+   "chosen_ratio_counts": {
+    "1.0": 200
+   },
+   "median_ratio": 1.0,
+   "test_loss_mean": 0.0,
+   "violation_rate": 0.0
+  },
+  {
+   "loss": "average",
+   "eps": 0.1,
+   "delta": 0.1,
+   "splits": 200,
+   "chosen_ratio_counts": {
+    "1.0": 200
+   },
+   "median_ratio": 1.0,
+   "test_loss_mean": 0.0,
+   "violation_rate": 0.0
+  }
+ ],
+ "normalize_helm": {
+  "prompts_tokens_before": 10088135,
+  "after": 10036840,
+  "saved_pct": 0.5084686118891124
+ },
+ "reader_windows": 0,
+ "runtime_s": 13.650508642196655
+}

@@ -39,7 +39,7 @@ from thrift_llm.compress import Compressor, _paragraphs, _units, normalize_text 
 
 N = int(os.environ.get("N", 240))
 RATIOS = [0.6, 0.4, 0.25]
-EPS = [0.02, 0.05]
+EPS = [0.02, 0.05, 0.10]
 DELTA = 0.1
 SPLITS = 200
 K_DOCS = 10
@@ -131,22 +131,33 @@ def main():
         out["by_ratio"].append(e)
         print(f"keep {r:.1f}: F1 thrift {e['thrift']['f1']:.3f}  truncate {e['truncate']['f1']:.3f}  random {e['random']['f1']:.3f}  (full {full.mean():.3f})")
 
-    loss = {r: np.clip(full - np.array([row["thrift"][str(r)] for row in rows]), 0, 1) for r in RATIOS}
+    # Two certified quantities: "per_question" = mean of max(0, F1_full - F1_comp) (no credit for
+    # answers that improve; strict), and "average" = mean F1 drop (gains offset losses), certified
+    # through the [0, 1] loss (1 + F1_full - F1_comp) / 2 <= (1 + eps) / 2.
+    comp = {r: np.array([row["thrift"][str(r)] for row in rows]) for r in RATIOS}
+    losses = {
+        "per_question": (lambda r, eps: np.clip(full - comp[r], 0, 1), lambda eps: eps),
+        "average": (lambda r, eps: (1 + full - comp[r]) / 2, lambda eps: (1 + eps) / 2),
+    }
     srng = np.random.default_rng(0)
-    for eps in EPS:
-        chosen, test_loss, viol = [], [], []
-        for _ in range(SPLITS):
-            idx = srng.permutation(len(rows))
-            ca, te = idx[: len(idx) // 2], idx[len(idx) // 2 :]
-            cert = risk.learn_then_test([1.0] + RATIOS, lambda r, ca=ca: np.zeros(len(ca)) if r == 1.0 else loss[r][ca], eps, DELTA)
-            chosen.append(cert.setting)
-            tl = 0.0 if cert.setting == 1.0 else float(loss[cert.setting][te].mean())
-            test_loss.append(tl)
-            viol.append(tl > eps)
-        vals, cnt = np.unique(chosen, return_counts=True)
-        out["certified"].append({"eps": eps, "delta": DELTA, "splits": SPLITS, "chosen_ratio_counts": {str(v): int(c) for v, c in zip(vals, cnt)},
-                                 "median_ratio": float(np.median(chosen)), "test_loss_mean": float(np.mean(test_loss)), "violation_rate": float(np.mean(viol))})
-        print(f"eps={eps}: median keep {np.median(chosen):.2f}, test loss {np.mean(test_loss):.4f}, violated {100 * np.mean(viol):.1f}% of splits")
+    for kind, (lf, target) in losses.items():
+        for eps in EPS:
+            chosen, test_loss, viol = [], [], []
+            for _ in range(SPLITS):
+                idx = srng.permutation(len(rows))
+                ca, te = idx[: len(idx) // 2], idx[len(idx) // 2 :]
+                cert = risk.learn_then_test([1.0] + RATIOS, lambda r, ca=ca, eps=eps: (np.zeros(len(ca)) if kind == "per_question" else np.full(len(ca), 0.5))
+                                            if r == 1.0 else lf(r, eps)[ca], target(eps), DELTA)
+                chosen.append(cert.setting)
+                raw = 0.0 if cert.setting == 1.0 else float((np.clip(full - comp[cert.setting], 0, 1) if kind == "per_question" else full - comp[cert.setting])[te].mean())
+                test_loss.append(raw)
+                viol.append(raw > eps)
+            vals, cnt = np.unique(chosen, return_counts=True)
+            out["certified"].append({"loss": kind, "eps": eps, "delta": DELTA, "splits": SPLITS, "chosen_ratio_counts": {str(v): int(c) for v, c in zip(vals, cnt)},
+                                     "median_ratio": float(np.median(chosen)), "test_loss_mean": float(np.mean(test_loss)), "violation_rate": float(np.mean(viol))})
+            print(f"{kind} eps={eps}: median keep {np.median(chosen):.2f}, test loss {np.mean(test_loss):.4f}, violated {100 * np.mean(viol):.1f}% of splits")
+    for r in RATIOS:
+        out["by_ratio"][RATIOS.index(r)]["thrift"]["answers_changed_worse"] = float(np.mean(full - comp[r] > 1e-9))
 
     # Lossless stage on every HELM Lite prompt
     before = after = 0

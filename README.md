@@ -14,8 +14,8 @@ real run in this repo, on real model outputs, with no API key needed to reproduc
 |---|---|---|
 | **Routing** | 8,021 HELM Lite questions, real GPT-4o-mini and GPT-4o answers | **41% lower bill** for a **0.7-point** accuracy drop, certified at ≤ 2 points |
 | **Semantic cache** | Quora Question Pairs (adversarial near-duplicates) | **6x more cache hits** than exact matching, wrong answers certified ≤ 2% |
-| **Compression** | Natural Questions with 10 retrieved passages, real BERT reader | COMPRESS_HEADLINE |
-| **Overhead** | in-process, mock upstream | OVERHEAD_HEADLINE |
+| **Compression** | Natural Questions with 10 retrieved passages, real BERT reader | keeps **97.6%** of reader F1 at **25%** of the context (truncation keeps 27%) |
+| **Overhead** | in-process, mock upstream | **1.3 ms** p50 added per request; cache hits 0.08 ms |
 
 ![Routing results](docs/figures/routing.png)
 
@@ -150,11 +150,49 @@ safe (see [cache.py](thrift_llm/cache.py)).
 
 ### 3. Compression: does the answer survive?
 
-COMPRESS_SECTION
+Each of 240 Natural Questions items gets its gold passage plus 9 distractor passages,
+shuffled (about 2031 tokens), like a retriever's top-10. A real BERT reader
+(SQuAD fine-tuned, ONNX) answers from the full and the compressed context. Full-context F1 is 0.553.
+
+| Context kept | Thrift (query-aware) | Truncate | Random sentences |
+|---|---|---|---|
+| 60% | **0.541** (98%) | 0.310 (56%) | 0.413 (75%) |
+| 40% | **0.536** (97%) | 0.229 (42%) | 0.294 (53%) |
+| 25% | **0.539** (98%) | 0.150 (27%) | 0.275 (50%) |
+
+At a quarter of the tokens, Thrift keeps 97.6% of answer quality; cutting the end keeps
+27%. Script: [scripts/eval_compress.py](scripts/eval_compress.py), raw numbers in
+[results/compress.json](results/compress.json).
+
+**Honest note on the guarantee.** With only 120 calibration questions, Learn-then-Test cannot
+certify any compression at ε = 2 or 5 points, so the certified keep-ratio stays at 100% (it is
+conservative, never wrong). Per-question answers flip in both directions, so the per-question loss is
+6–8% even though average F1 barely moves. At ε = 10 points it certifies compression in
+24% of splits with 2% violations (target ≤ 10%).
+Certifying 25% context at a 5-point average bound needs roughly 3,500 labelled questions: collect them
+with the shadow log and certify a keep-ratio with `thrift_llm.risk.learn_then_test`. Until then the shipped
+default (keep 50% of messages over 500 tokens) is an empirical setting, not a certified one; set
+`select = false` under `[compress]` to keep only the lossless stages.
+
+The lossless normalisation stage alone removes 0.5% of tokens from HELM Lite prompts
+(already clean text; scraped HTML and PDFs carry much more whitespace).
 
 ### 4. Overhead
 
-OVERHEAD_SECTION
+Measured with zero-latency mock upstreams so all time is Thrift's own (4-core cloud VM, Python 3.13.16):
+
+| Path | p50 | p99 |
+|---|---|---|
+| Cache miss, short prompt (route + cache lookup + ledger) | 1.3 ms | 5.2 ms |
+| Cache hit | 0.08 ms | 1.3 ms |
+| Long context compressed (~2k tokens) | 21 ms | 70 ms |
+| Semantic lookup, 1k / 10k / 50k entries | 0.4 / 3.1 / 11.7 ms | |
+
+Over HTTP, one uvicorn worker served 211 requests/s at concurrency 32 (p50 105 ms, which is queueing,
+with the load generator on the same 4 cores). LLM calls take 300–3,000 ms, so in-process overhead is
+under 1% of a typical request. For more throughput run several workers behind a load balancer; the
+exact-match layer and ledger are per process unless you point `cache.path` at shared storage. Script:
+[scripts/bench_overhead.py](scripts/bench_overhead.py).
 
 ## Calibrate on your own traffic
 
@@ -181,7 +219,7 @@ python scripts/eval_cache.py        # downloads QQP, results/cache.json
 python scripts/eval_compress.py     # downloads the ONNX BERT reader, results/compress.json
 python scripts/bench_overhead.py    # results/overhead.json
 python scripts/make_figures.py      # docs/figures/*.png
-pytest -q                           # 28 tests
+pytest -q                           # 31 tests
 ```
 
 ## Honest limitations
@@ -211,7 +249,7 @@ scripts/         fetch_helm.py · eval_router.py · eval_cache.py · eval_compre
                  bench_overhead.py · make_figures.py · build_paper.py
 results/         raw JSON for every number in this README
 docs/            paper (HTML + PDF) and figures
-tests/           28 tests: risk math, cache, compression, router, HTTP server end to end
+tests/           31 tests: risk math, cache, compression, router, HTTP server end to end
 ```
 
 ## Data and acknowledgements

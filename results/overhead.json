@@ -1,0 +1,48 @@
+{
+ "short_prompt_miss": {
+  "n": 2000,
+  "p50_ms": 1.2854019996666466,
+  "p99_ms": 5.206191829183808,
+  "mean_ms": 1.6399948989947006
+ },
+ "long_context_compress": {
+  "n": 300,
+  "p50_ms": 21.309136499439774,
+  "p99_ms": 69.71925528840073,
+  "mean_ms": 23.681694330007304
+ },
+ "cache_hit": {
+  "n": 2000,
+  "p50_ms": 0.08268399960797979,
+  "p99_ms": 1.3290340897947315,
+  "mean_ms": 0.14107662398146203
+ },
+ "semantic_lookup_by_size": {
+  "1000": {
+   "p50_ms": 0.4129270009798347,
+   "p99_ms": 0.7714866506103119
+  },
+  "10000": {
+   "p50_ms": 3.080781999415194,
+   "p99_ms": 4.126346660359552
+  },
+  "50000": {
+   "p50_ms": 11.713301999407122,
+   "p99_ms": 18.04018554123099
+  }
+ },
+ "http": {
+  "requests": 4000,
+  "concurrency": 32,
+  "rps": 211.41772914607614,
+  "p50_ms": 104.60574500029907,
+  "p99_ms": 671.8145204094253,
+  "note": "one uvicorn worker process, every request a unique prompt (cache misses), zero-latency mock upstream, load generator on the same VM"
+ },
+ "machine": {
+  "cpu": "x86_64",
+  "cores": 4,
+  "python": "3.13.16",
+  "tokenizer": "tiktoken/o200k_base"
+ }
+}

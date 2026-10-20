@@ -12,7 +12,6 @@ import os
 import platform
 import socket
 import sys
-import threading
 import time
 
 import httpx
@@ -73,24 +72,30 @@ async def pipeline_overhead():
     return out
 
 
-def http_throughput(n=3000, conc=64):
-    import uvicorn
-
-    from thrift_llm.server import create_app
+def http_throughput(n=4000, conc=32):
+    """Gateway in its own process (as deployed), load generator in this one."""
+    import subprocess
+    import tempfile
 
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
     port = s.getsockname()[1]
     s.close()
-    server = uvicorn.Server(uvicorn.Config(create_app(cfg0()), host="127.0.0.1", port=port, log_level="error"))
-    th = threading.Thread(target=server.run, daemon=True)
-    th.start()
-    while not server.started:
-        time.sleep(0.05)
+    cfg = tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False)
+    cfg.write('[server]\nport = {port}\n[[tier]]\nname = "cheap"\nmodel = "gpt-4o-mini"\nbase_url = "mock://cheap"\n'
+              '[[tier]]\nname = "strong"\nmodel = "gpt-4o"\nbase_url = "mock://strong"\n'.replace("{port}", str(port)))
+    cfg.close()
+    proc = subprocess.Popen([sys.executable, "-m", "thrift_llm.cli", "serve", "--config", cfg.name], stderr=subprocess.DEVNULL)
+    for _ in range(100):
+        try:
+            httpx.get(f"http://127.0.0.1:{port}/healthz")
+            break
+        except httpx.HTTPError:
+            time.sleep(0.1)
 
     async def go():
         lat = []
-        async with httpx.AsyncClient(timeout=30, limits=httpx.Limits(max_connections=conc)) as cl:
+        async with httpx.AsyncClient(timeout=30, limits=httpx.Limits(max_connections=conc, max_keepalive_connections=conc)) as cl:
             sem = asyncio.Semaphore(conc)
 
             async def one(i):
@@ -101,15 +106,20 @@ def http_throughput(n=3000, conc=64):
                     assert r.status_code == 200
                     lat.append((time.perf_counter() - t) * 1000)
 
+            await asyncio.gather(*(one(i) for i in range(200)))  # warm-up
+            lat.clear()
             t0 = time.perf_counter()
-            await asyncio.gather(*(one(i) for i in range(n)))
+            await asyncio.gather(*(one(i) for i in range(200, 200 + n)))
             return n / (time.perf_counter() - t0), lat
 
-    rps, lat = asyncio.run(go())
-    server.should_exit = True
-    th.join(timeout=5)
+    try:
+        rps, lat = asyncio.run(go())
+    finally:
+        proc.terminate()
+        proc.wait(timeout=10)
+        os.unlink(cfg.name)
     res = {"requests": n, "concurrency": conc, "rps": rps, "p50_ms": float(np.percentile(lat, 50)), "p99_ms": float(np.percentile(lat, 99)),
-           "note": "single uvicorn worker, mock upstream with zero latency, client on the same machine"}
+           "note": "one uvicorn worker process, every request a unique prompt (cache misses), zero-latency mock upstream, load generator on the same VM"}
     print("http", res)
     return res
 

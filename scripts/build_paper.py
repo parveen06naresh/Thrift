@@ -64,7 +64,8 @@ g = R["pairs"][0]["results"][1]
 cert2 = K["runs"]
 c2 = [r["certified"][1] for r in cert2]
 best = min(C["by_ratio"], key=lambda b: b["keep_ratio"])
-cc = {c["eps"]: c for c in C["certified"]}
+cc = {c["eps"]: c for c in C["certified"] if c.get("loss", "per_question") == "per_question"}
+ca = {c["eps"]: c for c in C["certified"] if c.get("loss") == "average"}
 
 html = f"""<!doctype html><html><head><meta charset="utf-8"><title>Thrift paper</title>
 <style>
@@ -176,9 +177,13 @@ Zoo) answers from the full and compressed contexts; quality is SQuAD F1 against 
 <table><tr><th>context kept</th><th>Thrift (query-aware)</th><th>truncate</th><th>random sentences</th></tr>{comp_rows()}</table>
 <div class="cap">Table 3. Reader F1 (and share of full-context F1 retained) at equal token budgets.</div>
 <img src="{img('compression')}" style="width:62%;display:block;margin:0 auto">
-<p>Certification over 200 random calibration/test halvings: at ε = 0.02 F1 the median certified keep-ratio is
-{cc[0.02]['median_ratio']:.2f} (test loss {cc[0.02]['test_loss_mean']:.3f}, bound held in {pct(1 - cc[0.02]['violation_rate'])} of halvings);
-at ε = 0.05 it is {cc[0.05]['median_ratio']:.2f} (test loss {cc[0.05]['test_loss_mean']:.3f}, held in {pct(1 - cc[0.05]['violation_rate'])}).
+<p>Certification over 200 random calibration/test halvings ({C['n'] // 2} calibration questions each) is conservative here: at
+ε = 0.02 and 0.05 F1, for both the per-question and the average loss, Learn-then-Test certifies no compression (keep-ratio 1.0 in every
+halving, so the bound trivially holds). Answers flip in both directions under compression, so the per-question loss is 6–8% even though
+mean F1 barely moves, and 120 points cannot separate that from ε. At ε = 0.10 (per-question) it certifies some compression in
+{pct(1 - cc[0.1]['chosen_ratio_counts'].get('1.0', 0) / cc[0.1]['splits'])} of halvings, with test loss {cc[0.1]['test_loss_mean']:.3f} and
+the bound violated in {pct(cc[0.1]['violation_rate'])} (target ≤ 10%). We estimate roughly 3,500 labelled questions are needed to certify a
+25% keep-ratio at a 5-point average bound; the shipped default is therefore an empirical setting.
 The lossless normalisation stage alone removes {C['normalize_helm']['saved_pct']:.1f}% of tokens from all HELM Lite prompts, which are
 already clean; scraped web pages and PDFs typically carry far more whitespace.</p>
 
