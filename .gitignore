@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+models/
+data/helm/
+data/qqp.tsv
+*.sqlite
+thrift-shadow.jsonl
+thrift.toml
+results/.compress_rows.jsonl

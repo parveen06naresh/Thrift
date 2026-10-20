@@ -1,0 +1,51 @@
+# Thrift gateway config. Tiers are ordered cheapest -> strongest.
+# Clients call model "thrift-auto" to let Thrift route, or a tier name to pin one.
+
+[server]
+host = "127.0.0.1"
+port = 8787
+# api_keys = ["sk-thrift-change-me"]   # require clients to send one of these as Bearer token
+
+[[tier]]
+name = "cheap"
+model = "gpt-4o-mini"
+base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+
+[[tier]]
+name = "strong"
+model = "gpt-4o"
+base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+
+# Self-hosted example (vLLM / SGLang / Ollama all speak this API):
+# [[tier]]
+# name = "cheap"
+# model = "meta-llama/Llama-3.1-8B-Instruct"
+# base_url = "http://localhost:8000/v1"
+# api_key_env = "VLLM_API_KEY"
+
+[router]
+enabled = true
+# path = "router.json"      # from `thrift calibrate`; default is the bundled HELM-calibrated router
+
+[cache]
+enabled = true
+semantic = true
+threshold = 0.92            # certified <= 2% wrong-answer rate on Quora Question Pairs
+ttl_s = 604800
+# path = "thrift-cache.sqlite"
+
+[compress]
+enabled = true
+keep_ratio = 0.5            # share of long-context tokens kept by query-aware selection
+min_tokens = 500            # only messages longer than this are candidates
+
+[ledger]
+# path = "thrift-ledger.sqlite"
+
+[shadow]
+rate = 0.0                  # e.g. 0.02: also send 2% of cheap-routed requests to the strong tier, for recalibration
+
+[prices]                    # USD per 1M tokens [input, output]; extends the built-in table
+# "my-finetune" = [0.30, 1.20]

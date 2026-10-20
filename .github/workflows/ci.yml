@@ -1,0 +1,24 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: pytest -q
+      - name: gateway smoke test (offline mock tiers)
+        run: |
+          thrift-llm serve --demo --port 8799 &
+          sleep 3
+          curl -sf localhost:8799/v1/chat/completions -H 'content-type: application/json' \
+            -d '{"model":"thrift-auto","messages":[{"role":"user","content":"What is the capital of France?"}]}'
+          curl -sf localhost:8799/thrift/stats > /dev/null
+          curl -sf localhost:8799/metrics | grep thrift_requests_total

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thrift Dashboard</title>
+<style>
+:root{--bg:#0b0d10;--panel:#12161b;--line:#222a33;--text:#e8edf2;--muted:#8a96a3;--accent:#3ddc97;--warn:#f5b84b;--bad:#ff6b6b;--blue:#6aa9ff}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){--bg:#f6f7f9;--panel:#fff;--line:#e3e7ec;--text:#14181d;--muted:#5d6874;--accent:#0f9d63;--warn:#b7791f;--bad:#c53030;--blue:#2563eb}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{display:flex;align-items:baseline;gap:12px;padding:20px 24px 8px;flex-wrap:wrap}
+h1{font-size:20px;margin:0;letter-spacing:.2px}h1 b{color:var(--accent)}.tag{color:var(--muted)}
+.live{margin-left:auto;color:var(--muted);font-size:12px}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:6px}
+main{padding:8px 24px 32px;display:grid;gap:16px;grid-template-columns:repeat(12,1fr)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+.kpi{grid-column:span 3}.kpi .v{font-size:28px;font-weight:650;font-variant-numeric:tabular-nums}.kpi .l{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.6px}
+.kpi .s{color:var(--muted);font-size:12px;margin-top:4px}.good{color:var(--accent)}
+.wide{grid-column:span 8}.side{grid-column:span 4}.full{grid-column:span 12}
+h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+svg text{fill:var(--muted);font-size:11px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}th{color:var(--muted);font-weight:500;font-size:12px}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line)}
+.pill.exact,.pill.semantic{color:var(--accent);border-color:var(--accent)}.pill.cheap{color:var(--blue);border-color:var(--blue)}
+.bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--line);margin:8px 0 6px}.bar span{display:block;height:100%}
+.legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:12px}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0}dt{color:var(--muted)}dd{margin:0;font-variant-numeric:tabular-nums}
+.scroll{overflow-x:auto}.empty{color:var(--muted);padding:24px 0;text-align:center}
+@media (max-width:900px){.kpi{grid-column:span 6}.wide,.side{grid-column:span 12}main{padding:8px 16px 24px}header{padding:16px}}
+</style>
+</head>
+<body>
+<header><h1><b>Thrift</b> gateway</h1><span class="tag">Same answers. Fewer tokens.</span><span class="live"><span class="dot" id="dot"></span><span id="up">connecting…</span></span></header>
+<main>
+  <div class="card kpi"><div class="l">Saved</div><div class="v good" id="k-saved">–</div><div class="s" id="k-saved-s"></div></div>
+  <div class="card kpi"><div class="l">Tokens not billed</div><div class="v" id="k-tok">–</div><div class="s" id="k-tok-s"></div></div>
+  <div class="card kpi"><div class="l">Cache hit rate</div><div class="v" id="k-cache">–</div><div class="s" id="k-cache-s"></div></div>
+  <div class="card kpi"><div class="l">Sent to cheap model</div><div class="v" id="k-route">–</div><div class="s" id="k-route-s"></div></div>
+  <div class="card wide"><h2>Spend per minute: actual vs without Thrift</h2><div id="chart"></div>
+    <div class="legend"><span><i style="background:var(--muted)"></i>Without Thrift</span><span><i style="background:var(--accent)"></i>Actual</span></div></div>
+  <div class="card side"><h2>Where the savings came from</h2><div class="bar" id="mix"></div><div class="legend" id="mix-l"></div>
+    <h2 style="margin-top:20px">Guarantees in force</h2><dl id="cfg"></dl></div>
+  <div class="card full"><h2>Recent requests</h2><div class="scroll"><table><thead><tr><th>Time</th><th>Tier</th><th>Cache</th><th>Prompt tokens</th><th>Sent</th><th>Out</th><th>Cost</th><th>Without Thrift</th><th>Overhead</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const usd=x=>x===0?'$0':x>=1?'$'+x.toFixed(2):x>=0.01?'$'+x.toFixed(3):'$'+x.toFixed(5);
+const num=x=>x>=1e6?(x/1e6).toFixed(2)+'M':x>=1e3?(x/1e3).toFixed(1)+'k':String(Math.round(x));
+const pct=x=>(100*x).toFixed(1)+'%';
+function chart(mins){
+  const W=760,H=220,P=34;
+  if(!mins.length){$('chart').innerHTML='<div class="empty">No traffic yet. Send a request to /v1/chat/completions.</div>';return}
+  const xs=mins.map(m=>m.t),ymax=Math.max(1e-9,...mins.map(m=>m.baseline_usd));
+  const x=t=>P+(W-2*P)*(xs.length<2?0.5:(t-xs[0])/(xs[xs.length-1]-xs[0]));
+  const y=v=>H-P+(-(H-2*P)*v/ymax);
+  const path=k=>mins.map((m,i)=>(i?'L':'M')+x(m.t).toFixed(1)+','+y(m[k]).toFixed(1)).join('');
+  let g='';for(let i=0;i<=4;i++){const v=ymax*i/4;g+=`<line x1="${P}" x2="${W-P}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="2" y="${y(v)+4}">${usd(v)}</text>`}
+  const lab=t=>new Date(t*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  g+=`<text x="${P}" y="${H-10}">${lab(xs[0])}</text><text x="${W-P-40}" y="${H-10}">${lab(xs[xs.length-1])}</text>`;
+  $('chart').innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="spend per minute">${g}
+   <path d="${path('baseline_usd')}" fill="none" stroke="var(--muted)" stroke-width="2" stroke-dasharray="4 4"/>
+   <path d="${path('cost_usd')}" fill="none" stroke="var(--accent)" stroke-width="2.5"/></svg>`;
+}
+function render(s){
+  const t=s.totals,d=s.derived,c=s.config;
+  $('up').textContent=`${t.requests} requests · up ${Math.round(s.uptime_s/60)} min · overhead p50 ${d.overhead_ms_p50.toFixed(1)} ms`;
+  $('k-saved').textContent=usd(d.savings_usd);$('k-saved-s').textContent=`${d.savings_pct.toFixed(1)}% of ${usd(t.baseline_usd)} baseline`;
+  $('k-tok').textContent=num(t.tokens_saved_compression+t.tokens_saved_cache);$('k-tok-s').textContent=`${num(t.tokens_saved_compression)} compressed · ${num(t.tokens_saved_cache)} cached`;
+  $('k-cache').textContent=pct(d.cache_hit_rate);$('k-cache-s').textContent=`${t.cache_exact} exact · ${t.cache_semantic} semantic`;
+  $('k-route').textContent=pct(d.cheap_route_rate);$('k-route-s').textContent=Object.entries(s.by_tier).map(([k,v])=>`${k}: ${v}`).join(' · ')||'no traffic';
+  chart(s.minutes);
+  const parts=[['Cache',t.saved_cache_usd,'var(--accent)'],['Routing',t.saved_routing_usd,'var(--blue)'],['Compression',t.saved_compression_usd,'var(--warn)']];
+  const tot=parts.reduce((a,p)=>a+Math.max(0,p[1]),0);
+  $('mix').innerHTML=tot>0?parts.filter(p=>p[1]>0).map(p=>`<span style="width:${(100*p[1]/tot).toFixed(2)}%;background:${p[2]}"></span>`).join(''):'';
+  $('mix-l').innerHTML=parts.map(p=>`<span><i style="background:${p[2]}"></i>${p[0]} ${usd(Math.max(0,p[1]))}</span>`).join('');
+  const r=c.router,cert=r&&r.certificate;
+  $('cfg').innerHTML=[
+    ['Tiers',(c.tiers||[]).map(x=>x.model).join(' → ')],
+    ['Router',r?(cert?`quality drop ≤ ${(100*cert.epsilon).toFixed(1)} pts w.p. ${(100*(1-cert.delta)).toFixed(0)}% (threshold ${r.threshold.toFixed(3)})`:`threshold ${r.threshold.toFixed(3)} (uncalibrated)`):'off'],
+    ['Cache',c.cache?`${c.cache.entries} entries · similarity ≥ ${c.cache.threshold}`:'off'],
+    ['Compression',c.compress?`keep ${(100*c.compress.keep_ratio).toFixed(0)}% of long context`:'off'],
+    ['Tokenizer',c.tokenizer],['Version',c.version]
+  ].map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('');
+  $('rows').innerHTML=s.recent.length?s.recent.map(e=>`<tr><td>${new Date(e.ts*1000).toLocaleTimeString()}</td>
+    <td><span class="pill ${e.tier===(c.tiers[0]||{}).name?'cheap':''}">${e.model}</span></td><td><span class="pill ${e.cache}">${e.cache}</span></td>
+    <td>${num(e.tokens_in_original)}</td><td>${num(e.tokens_in_sent)}</td><td>${num(e.tokens_out)}</td><td>${usd(e.cost_usd)}</td><td>${usd(e.baseline_usd)}</td><td>${e.overhead_ms.toFixed(1)} ms</td></tr>`).join('')
+    :'<tr><td colspan="9" class="empty">No requests yet</td></tr>';
+}
+async function tick(){
+  try{const r=await fetch('/thrift/stats');render(await r.json());$('dot').style.background='var(--accent)'}
+  catch(e){$('dot').style.background='var(--bad)';$('up').textContent='gateway unreachable'}
+}
+tick();setInterval(tick,2000);
+</script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "thrift-llm"
+version = "0.1.0"
+description = "Same answers. Fewer tokens. An OpenAI-compatible LLM gateway that cuts token spend with certified quality."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Parveen Kumar Naresh Kumar" }]
+requires-python = ">=3.10"
+keywords = ["llm", "gateway", "routing", "semantic-cache", "prompt-compression", "conformal", "inference"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = ["numpy>=1.24", "httpx>=0.25", "starlette>=0.37", "uvicorn>=0.23", "tomli>=2; python_version < '3.11'"]
+
+[project.optional-dependencies]
+tiktoken = ["tiktoken>=0.7"]
+dev = ["pytest>=7", "ruff>=0.5", "tiktoken>=0.7"]
+eval = ["onnxruntime>=1.16", "six", "matplotlib", "tiktoken>=0.7"]
+
+[project.urls]
+Homepage = "https://github.com/parveen06naresh/thrift"
+
+[project.scripts]
+thrift-llm = "thrift_llm.cli:main"
+
+[tool.setuptools]
+packages = ["thrift_llm"]
+
+[tool.setuptools.package-data]
+thrift_llm = ["dashboard.html", "data/*.json"]
+
+[tool.ruff]
+line-length = 160
+target-version = "py310"
+extend-exclude = ["scripts/third_party"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E731", "B023", "B905", "E701"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
