@@ -30,6 +30,14 @@ MODELS = [
     "anthropic_claude-3-haiku-20240307",
     "anthropic_claude-3-5-sonnet-20241022",
 ]
+# Extra models for the multi-provider ladder (--multi): five vendors on the same questions.
+MULTI = [
+    "google_gemini-1.5-flash-002",
+    "google_gemini-1.5-pro-002",
+    "deepseek-ai_deepseek-v3",
+    "mistralai_mistral-large-2407",
+    "anthropic_claude-3-5-haiku-20241022",
+]
 # Scenario -> the per-question quality metric HELM reports for it (all in [0, 1]).
 METRIC = {
     "mmlu": "exact_match",
@@ -61,7 +69,9 @@ def strip_model(run: str) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="data/helm")
+    ap.add_argument("--multi", action="store_true", help="also fetch the multi-provider models")
     args = ap.parse_args()
+    models = MODELS + (MULTI if args.multi else [])
     os.makedirs(args.out, exist_ok=True)
     r2s = json.loads(get(f"{BASE}/releases/{RELEASE}/runs_to_run_suites.json"))
 
@@ -69,7 +79,7 @@ def main() -> None:
     for run, suite in r2s.items():
         scen = run.split(":", 1)[0]
         model = run.split("model=", 1)[1].split(",", 1)[0]
-        if scen not in METRIC or model not in MODELS:
+        if scen not in METRIC or model not in models:
             continue
         key = strip_model(run)
         safe = key.replace("/", "_")
@@ -98,9 +108,11 @@ def main() -> None:
                 print(path, res)
     print(f"{len(jobs)} files in {args.out}")
     build_table(args.out)
+    if args.multi:
+        build_table(args.out, MODELS + MULTI, "data/helm_multi.jsonl.gz")
 
 
-def build_table(root: str) -> None:
+def build_table(root: str, models: list[str] = MODELS, out_path: str = "data/helm_routing.jsonl.gz") -> None:
     """Join instances with every model's score and token counts into one row per question."""
     rows = {}
     for fn in sorted(os.listdir(f"{root}/instances")):
@@ -114,7 +126,7 @@ def build_table(root: str) -> None:
                 "run": run, "scenario": scen, "id": inst["id"],
                 "input": inst["input"]["text"], "refs": refs, "models": {},
             }
-    for model in MODELS:
+    for model in models:
         d = f"{root}/{model}"
         if not os.path.isdir(d):
             continue
@@ -131,11 +143,11 @@ def build_table(root: str) -> None:
                     "in": int(s.get("num_prompt_tokens", 0)),
                     "out": int(s.get("num_output_tokens", 0)),
                 }
-    out = [r for r in rows.values() if len(r["models"]) == len(MODELS)]
-    with gzip.open("data/helm_routing.jsonl.gz", "wt") as f:
+    out = [r for r in rows.values() if len(r["models"]) == len(models)]
+    with gzip.open(out_path, "wt") as f:
         for r in out:
             f.write(json.dumps(r) + "\n")
-    print(f"{len(out)} questions with all {len(MODELS)} models -> data/helm_routing.jsonl.gz")
+    print(f"{len(out)} questions with all {len(models)} models -> {out_path}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,84 @@
+# One endpoint for Gemini, ChatGPT, DeepSeek, Claude, Mistral, Grok and Perplexity.
+#
+#   export GEMINI_API_KEY=... OPENAI_API_KEY=... DEEPSEEK_API_KEY=... ANTHROPIC_API_KEY=...
+#   export MISTRAL_API_KEY=... XAI_API_KEY=... PERPLEXITY_API_KEY=...
+#   thrift-llm serve --config examples/multi_provider.toml
+#
+# model "thrift-auto"  -> the ladder picks the cheapest model expected to match GPT-4o
+# model "grok", "sonar", "claude-haiku", ... -> pinned to that provider (still cached, compressed, metered)
+#
+# The bundled ladder was certified (epsilon = 2 points) for exactly the models below, on HELM
+# Lite. Tier *names* are what the ladder knows; to run newer models, keep the names, change
+# `model`, and re-certify on your own labelled prompts (`thrift-llm calibrate --ladder`). The
+# drift guard ([shadow] + [drift]) watches the guarantee on live traffic in the meantime.
+
+[server]
+port = 8787
+
+[[tier]]
+name = "gemini-1.5-flash-002"
+provider = "gemini"
+model = "gemini-1.5-flash-002"
+fallback = ["gpt-4o-mini-2024-07-18", "gpt-4o-2024-08-06"]
+
+[[tier]]
+name = "gpt-4o-mini-2024-07-18"
+provider = "openai"
+model = "gpt-4o-mini-2024-07-18"
+
+[[tier]]
+name = "deepseek-v3"
+provider = "deepseek"
+model = "deepseek-chat"
+
+[[tier]]
+name = "claude-3-5-haiku-20241022"
+provider = "anthropic"            # native Messages API: prompt caching on by default
+model = "claude-3-5-haiku-20241022"
+
+[[tier]]
+name = "gemini-1.5-pro-002"
+provider = "gemini"
+model = "gemini-1.5-pro-002"
+
+[[tier]]
+name = "mistral-large-2407"
+provider = "mistral"
+model = "mistral-large-2407"
+
+# Pinned-only tiers: callable by name, never chosen by the ladder.
+[[tier]]
+name = "grok"
+provider = "xai"
+model = "grok-4"
+
+[[tier]]
+name = "sonar"
+provider = "perplexity"           # live web search: never cached (cache = false by default)
+model = "sonar-pro"
+
+[[tier]]
+name = "claude-sonnet"
+provider = "anthropic"
+model = "claude-sonnet-4-5"
+
+# The strongest tier comes last: it is the quality reference and the default fallback.
+[[tier]]
+name = "gpt-4o-2024-08-06"
+provider = "openai"
+model = "gpt-4o-2024-08-06"
+
+[router]
+path = "bundled:ladder"
+
+[shadow]
+rate = 0.05                       # 5% of cheaper-routed requests are also answered by GPT-4o and judged
+
+[drift]
+alpha = 0.05                      # false-alarm probability over the whole stream
+judge = "llm"                     # the strongest tier grades the cheaper answer
+action = "safe_mode"              # on alarm: send everything to the strongest tier until reset
+
+[prices]                          # models missing from the built-in table, USD per 1M tokens [input, output]
+# "grok-4" = [3.00, 15.00]
+# "sonar-pro" = [3.00, 15.00]

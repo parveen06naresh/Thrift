@@ -82,6 +82,36 @@ def _sigmoid(z):
     return 1.0 / (1.0 + np.exp(-np.clip(z, -30, 30)))
 
 
+def _fit_w(feats: list[dict[int, float]], y, l2: float = 1e-4, epochs: int = 40, lr: float = 0.05, seed: int = 0) -> np.ndarray:
+    """Logistic regression with soft labels, mini-batch Adam."""
+    y = np.asarray(y, dtype=np.float32)
+    rng = np.random.default_rng(seed)
+    w = np.zeros(DIM, dtype=np.float32)
+    m = np.zeros_like(w)
+    v = np.zeros_like(w)
+    step = 0
+    bs = 256
+    for _ in range(epochs):
+        order = rng.permutation(len(y))
+        for b in range(0, len(y), bs):
+            idx = order[b : b + bs]
+            X = _dense([feats[i] for i in idx])
+            g = X.T @ (_sigmoid(X @ w) - y[idx]) / len(idx) + l2 * w
+            step += 1
+            m = 0.9 * m + 0.1 * g
+            v = 0.999 * v + 0.001 * g * g
+            w -= lr * (m / (1 - 0.9**step)) / (np.sqrt(v / (1 - 0.999**step)) + 1e-8)
+    return w
+
+
+def _pack(w: np.ndarray) -> str:
+    return base64.b64encode(zlib.compress(w.astype(np.float16).tobytes(), 9)).decode()
+
+
+def _unpack(s: str) -> np.ndarray:
+    return np.frombuffer(zlib.decompress(base64.b64decode(s)), dtype=np.float16).astype(np.float32)
+
+
 @dataclass
 class Router:
     """Two-tier router. `w` scores P(cheap model is good enough); route cheap if score >= threshold."""
@@ -100,25 +130,7 @@ class Router:
         return 1.0 - np.clip(np.asarray(q_strong) - np.asarray(q_cheap), 0.0, 1.0)
 
     def fit(self, texts: list[str], q_cheap, q_strong, l2: float = 1e-4, epochs: int = 40, lr: float = 0.05, seed: int = 0) -> Router:
-        y = self.targets(q_cheap, q_strong).astype(np.float32)
-        feats = [featurize(t) for t in texts]
-        rng = np.random.default_rng(seed)
-        w = np.zeros(DIM, dtype=np.float32)
-        m = np.zeros_like(w)
-        v = np.zeros_like(w)
-        step = 0
-        bs = 256
-        for _ in range(epochs):
-            order = rng.permutation(len(y))
-            for b in range(0, len(y), bs):
-                idx = order[b : b + bs]
-                X = _dense([feats[i] for i in idx])
-                g = X.T @ (_sigmoid(X @ w) - y[idx]) / len(idx) + l2 * w
-                step += 1
-                m = 0.9 * m + 0.1 * g
-                v = 0.999 * v + 0.001 * g * g
-                w -= lr * (m / (1 - 0.9**step)) / (np.sqrt(v / (1 - 0.999**step)) + 1e-8)
-        self.w = w
+        self.w = _fit_w([featurize(t) for t in texts], self.targets(q_cheap, q_strong), l2, epochs, lr, seed)
         return self
 
     def score(self, texts: list[str]) -> np.ndarray:
@@ -154,7 +166,7 @@ class Router:
             "certificate": self.certificate,
             "meta": self.meta,
             "dim": DIM,
-            "w": base64.b64encode(zlib.compress(self.w.astype(np.float16).tobytes(), 9)).decode(),
+            "w": _pack(self.w),
         }
 
     def save(self, path: str) -> None:
@@ -167,8 +179,11 @@ class Router:
             d = json.load(f)
         if d.get("format") != "thrift-router-v1" or d.get("dim") != DIM:
             raise ValueError(f"{path}: not a thrift-router-v1 file with dim {DIM}")
-        w = np.frombuffer(zlib.decompress(base64.b64decode(d["w"])), dtype=np.float16).astype(np.float32)
-        return cls(d["cheap"], d["strong"], w, d["threshold"], d.get("certificate"), d.get("meta", {}))
+        return cls(d["cheap"], d["strong"], _unpack(d["w"]), d["threshold"], d.get("certificate"), d.get("meta", {}))
+
+    @property
+    def tiers(self) -> list[str]:
+        return [self.cheap, self.strong]
 
 
 def calibrate_scores(scores, q_cheap, q_strong, epsilon: float, delta: float) -> risk.Certificate:
@@ -178,3 +193,99 @@ def calibrate_scores(scores, q_cheap, q_strong, epsilon: float, delta: float) ->
     qs = np.unique(np.quantile(scores, np.linspace(1, 0, 201)))[::-1]
     grid = [1.01] + [float(x) for x in qs]
     return risk.learn_then_test(grid, lambda t: (scores >= t) * gap, epsilon, delta)
+
+
+@dataclass
+class Ladder:
+    """N-model router across providers, ordered cheapest -> strongest (the reference model).
+
+    One scorer per cheaper model k estimates P(model k answers as well as the strongest). A
+    request goes to the cheapest model whose score clears the threshold t, else to the
+    strongest. The single knob t is certified exactly like the two-tier router:
+
+        E[ quality(strongest) - quality(chosen) ]  <=  epsilon     with probability >= 1 - delta
+    """
+
+    models: list = field(default_factory=list)  # tier names, cheapest first, strongest last
+    W: np.ndarray = field(default_factory=lambda: np.zeros((DIM, 0), dtype=np.float32))
+    threshold: float = 1.01
+    certificate: dict | None = None
+    meta: dict = field(default_factory=dict)
+
+    @property
+    def tiers(self) -> list[str]:
+        return list(self.models)
+
+    def fit(self, texts: list[str], Q, **kw) -> Ladder:
+        """Q: (n, K) per-prompt quality of each model, columns in `models` order."""
+        Q = np.asarray(Q, dtype=np.float64)
+        feats = [featurize(t) for t in texts]
+        cols = [_fit_w(feats, Router.targets(Q[:, k], Q[:, -1]), **kw) for k in range(Q.shape[1] - 1)]
+        self.W = np.stack(cols, axis=1)
+        return self
+
+    def scores(self, texts: list[str]) -> np.ndarray:
+        out = np.empty((len(texts), self.W.shape[1]))
+        for b in range(0, len(texts), 512):
+            out[b : b + 512] = _sigmoid(_dense([featurize(t) for t in texts[b : b + 512]]) @ self.W)
+        return out
+
+    @staticmethod
+    def choose(S: np.ndarray, t: float) -> np.ndarray:
+        """Index of the cheapest model whose score >= t; the strongest (K-1) if none."""
+        ok = np.asarray(S) >= t
+        first = np.argmax(ok, axis=1)
+        return np.where(ok.any(axis=1), first, S.shape[1])
+
+    def calibrate(self, texts: list[str], Q, epsilon: float = 0.02, delta: float = 0.1) -> risk.Certificate:
+        cert = calibrate_ladder(self.scores(texts), Q, epsilon, delta)
+        self.threshold = cert.setting
+        self.certificate = cert.to_dict()
+        return cert
+
+    def route(self, text: str) -> tuple[str, float]:
+        f = featurize(text)
+        idx = np.fromiter(f.keys(), dtype=np.int64)
+        val = np.fromiter(f.values(), dtype=np.float32)
+        s = _sigmoid(val @ self.W[idx])
+        k = int(self.choose(s[None, :], self.threshold)[0])
+        return self.models[k], float(s.max()) if len(s) else 0.0
+
+    def to_dict(self) -> dict:
+        return {"format": "thrift-ladder-v1", "models": self.models, "threshold": self.threshold, "certificate": self.certificate,
+                "meta": self.meta, "dim": DIM, "W": [_pack(self.W[:, k]) for k in range(self.W.shape[1])]}
+
+    def save(self, path: str) -> None:
+        with open(path, "w") as f:
+            json.dump(self.to_dict(), f)
+
+    @classmethod
+    def load(cls, path: str) -> Ladder:
+        with open(path) as f:
+            d = json.load(f)
+        if d.get("format") != "thrift-ladder-v1" or d.get("dim") != DIM:
+            raise ValueError(f"{path}: not a thrift-ladder-v1 file with dim {DIM}")
+        W = np.stack([_unpack(c) for c in d["W"]], axis=1)
+        return cls(d["models"], W, d["threshold"], d.get("certificate"), d.get("meta", {}))
+
+
+def calibrate_ladder(S, Q, epsilon: float, delta: float) -> risk.Certificate:
+    """Learn-then-Test over the ladder threshold, strictest (everything to the strongest) first."""
+    S = np.asarray(S, dtype=np.float64)
+    Q = np.asarray(Q, dtype=np.float64)
+    ref = Q[:, -1]
+    qs = np.unique(np.quantile(S, np.linspace(1, 0, 201)))[::-1]
+    grid = [1.01] + [float(x) for x in qs]
+    rows = np.arange(len(S))
+
+    def loss(t):
+        return np.clip(ref - Q[rows, Ladder.choose(S, t)], 0, 1)
+
+    return risk.learn_then_test(grid, loss, epsilon, delta)
+
+
+def load_policy(path: str):
+    """A router file of either kind."""
+    with open(path) as f:
+        fmt = json.load(f).get("format")
+    return Ladder.load(path) if fmt == "thrift-ladder-v1" else Router.load(path)

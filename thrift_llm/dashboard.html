@@ -34,7 +34,7 @@ dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0}dt{color:va
   <div class="card kpi"><div class="l">Saved</div><div class="v good" id="k-saved">–</div><div class="s" id="k-saved-s"></div></div>
   <div class="card kpi"><div class="l">Tokens not billed</div><div class="v" id="k-tok">–</div><div class="s" id="k-tok-s"></div></div>
   <div class="card kpi"><div class="l">Cache hit rate</div><div class="v" id="k-cache">–</div><div class="s" id="k-cache-s"></div></div>
-  <div class="card kpi"><div class="l">Sent to cheap model</div><div class="v" id="k-route">–</div><div class="s" id="k-route-s"></div></div>
+  <div class="card kpi"><div class="l">Sent to a cheaper model</div><div class="v" id="k-route">–</div><div class="s" id="k-route-s"></div></div>
   <div class="card wide"><h2>Spend per minute: actual vs without Thrift</h2><div id="chart"></div>
     <div class="legend"><span><i style="background:var(--muted)"></i>Without Thrift</span><span><i style="background:var(--accent)"></i>Actual</span></div></div>
   <div class="card side"><h2>Where the savings came from</h2><div class="bar" id="mix"></div><div class="legend" id="mix-l"></div>
@@ -68,20 +68,23 @@ function render(s){
   $('k-cache').textContent=pct(d.cache_hit_rate);$('k-cache-s').textContent=`${t.cache_exact} exact · ${t.cache_semantic} semantic`;
   $('k-route').textContent=pct(d.cheap_route_rate);$('k-route-s').textContent=Object.entries(s.by_tier).map(([k,v])=>`${k}: ${v}`).join(' · ')||'no traffic';
   chart(s.minutes);
-  const parts=[['Cache',t.saved_cache_usd,'var(--accent)'],['Routing',t.saved_routing_usd,'var(--blue)'],['Compression',t.saved_compression_usd,'var(--warn)']];
+  const parts=[['Cache',t.saved_cache_usd,'var(--accent)'],['Routing',t.saved_routing_usd,'var(--blue)'],['Compression',t.saved_compression_usd,'var(--warn)'],
+    ['Provider cache',t.saved_prompt_cache_usd||0,'var(--muted)']];
   const tot=parts.reduce((a,p)=>a+Math.max(0,p[1]),0);
   $('mix').innerHTML=tot>0?parts.filter(p=>p[1]>0).map(p=>`<span style="width:${(100*p[1]/tot).toFixed(2)}%;background:${p[2]}"></span>`).join(''):'';
   $('mix-l').innerHTML=parts.map(p=>`<span><i style="background:${p[2]}"></i>${p[0]} ${usd(Math.max(0,p[1]))}</span>`).join('');
   const r=c.router,cert=r&&r.certificate;
   $('cfg').innerHTML=[
-    ['Tiers',(c.tiers||[]).map(x=>x.model).join(' → ')],
-    ['Router',r?(cert?`quality drop ≤ ${(100*cert.epsilon).toFixed(1)} pts w.p. ${(100*(1-cert.delta)).toFixed(0)}% (threshold ${r.threshold.toFixed(3)})`:`threshold ${r.threshold.toFixed(3)} (uncalibrated)`):'off'],
+    ['Tiers',(c.tiers||[]).map(x=>`${x.model} <small>(${x.provider})</small>`).join(' → ')],
+    ['Router',r?(r.tiers&&r.tiers.length>2?`ladder of ${r.tiers.length} · `:'')+(cert?`quality drop ≤ ${(100*cert.epsilon).toFixed(1)} pts w.p. ${(100*(1-cert.delta)).toFixed(0)}% (threshold ${r.threshold.toFixed(3)})`:`threshold ${r.threshold.toFixed(3)} (uncalibrated)`):'off'],
+    ['Drift guard',!s.drift?'off (set [shadow] rate > 0)':s.drift.safe_mode?`<b style="color:var(--bad)">SAFE MODE</b>: live risk above ${(100*s.drift.epsilon).toFixed(1)} pts, all traffic on the strongest tier`
+      :`watching · ${s.drift.observations} requests, ${s.drift.judged} judged · est. risk ${(100*s.drift.risk_estimate).toFixed(2)} pts · e-value ${s.drift.e_value.toFixed(2)} / ${s.drift.alarm_threshold.toFixed(0)}`],
     ['Cache',c.cache?`${c.cache.entries} entries · similarity ≥ ${c.cache.threshold}`:'off'],
     ['Compression',c.compress?`keep ${(100*c.compress.keep_ratio).toFixed(0)}% of long context`:'off'],
     ['Tokenizer',c.tokenizer],['Version',c.version]
   ].map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('');
   $('rows').innerHTML=s.recent.length?s.recent.map(e=>`<tr><td>${new Date(e.ts*1000).toLocaleTimeString()}</td>
-    <td><span class="pill ${e.tier===(c.tiers[0]||{}).name?'cheap':''}">${e.model}</span></td><td><span class="pill ${e.cache}">${e.cache}</span></td>
+    <td><span class="pill ${e.tier!==(c.tiers[c.tiers.length-1]||{}).name?'cheap':''}">${e.model}</span></td><td><span class="pill ${e.cache}">${e.cache}</span></td>
     <td>${num(e.tokens_in_original)}</td><td>${num(e.tokens_in_sent)}</td><td>${num(e.tokens_out)}</td><td>${usd(e.cost_usd)}</td><td>${usd(e.baseline_usd)}</td><td>${e.overhead_ms.toFixed(1)} ms</td></tr>`).join('')
     :'<tr><td colspan="9" class="empty">No requests yet</td></tr>';
 }

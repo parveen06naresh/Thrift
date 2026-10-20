@@ -31,6 +31,7 @@ class Event:
     status: int = 200
     fallback: bool = False
     strong_sent_usd: float = 0.0  # what the *compressed* prompt would have cost on the strongest tier
+    list_usd: float | None = None  # this request on the tier it used, without the provider's prompt-cache discount
 
     @property
     def saved_usd(self) -> float:
@@ -47,7 +48,7 @@ class Ledger:
             "requests": 0, "errors": 0, "cache_exact": 0, "cache_semantic": 0, "routed_cheap": 0, "fallbacks": 0,
             "tokens_in_original": 0, "tokens_in_sent": 0, "tokens_out": 0, "tokens_saved_compression": 0,
             "tokens_saved_cache": 0, "cost_usd": 0.0, "baseline_usd": 0.0,
-            "saved_cache_usd": 0.0, "saved_compression_usd": 0.0, "saved_routing_usd": 0.0,
+            "saved_cache_usd": 0.0, "saved_compression_usd": 0.0, "saved_routing_usd": 0.0, "saved_prompt_cache_usd": 0.0,
         }
         self.by_tier: dict[str, int] = {}
         self.minutes: dict[int, dict] = {}
@@ -56,7 +57,7 @@ class Ledger:
             self._db = sqlite3.connect(path, check_same_thread=False)
             self._db.execute("CREATE TABLE IF NOT EXISTS events (ts REAL, json TEXT)")
 
-    def record(self, e: Event, cheap_tier: str) -> None:
+    def record(self, e: Event, strong_tier: str) -> None:
         with self._lock:
             t = self.totals
             t["requests"] += 1
@@ -72,8 +73,10 @@ class Ledger:
             elif e.status == 200:
                 t["tokens_saved_compression"] += max(0, e.tokens_in_original - e.tokens_in_sent)
                 t["saved_compression_usd"] += e.baseline_usd - e.strong_sent_usd
-                t["saved_routing_usd"] += e.strong_sent_usd - e.cost_usd
-            if e.tier == cheap_tier and e.cache not in ("exact", "semantic"):
+                listed = e.cost_usd if e.list_usd is None else e.list_usd
+                t["saved_routing_usd"] += e.strong_sent_usd - listed
+                t["saved_prompt_cache_usd"] += listed - e.cost_usd
+            if e.tier != strong_tier and e.status == 200 and e.cache not in ("exact", "semantic"):
                 t["routed_cheap"] += 1
             t["fallbacks"] += int(e.fallback)
             t["tokens_in_original"] += e.tokens_in_original

@@ -11,18 +11,61 @@ else:  # pragma: no cover
     import tomli as tomllib
 
 
+# provider -> (API style, base URL, env var holding the key). Every provider except Anthropic
+# speaks the OpenAI chat-completions API; Anthropic gets a native adapter (backends.py) so that
+# prompt caching and exact token usage work.
+PROVIDERS: dict[str, tuple[str, str, str | None]] = {
+    "openai": ("openai", "https://api.openai.com/v1", "OPENAI_API_KEY"),
+    "anthropic": ("anthropic", "https://api.anthropic.com/v1", "ANTHROPIC_API_KEY"),
+    "xai": ("openai", "https://api.x.ai/v1", "XAI_API_KEY"),
+    "perplexity": ("openai", "https://api.perplexity.ai", "PERPLEXITY_API_KEY"),
+    "gemini": ("openai", "https://generativelanguage.googleapis.com/v1beta/openai", "GEMINI_API_KEY"),
+    "deepseek": ("openai", "https://api.deepseek.com/v1", "DEEPSEEK_API_KEY"),
+    "mistral": ("openai", "https://api.mistral.ai/v1", "MISTRAL_API_KEY"),
+    "groq": ("openai", "https://api.groq.com/openai/v1", "GROQ_API_KEY"),
+    "together": ("openai", "https://api.together.xyz/v1", "TOGETHER_API_KEY"),
+    "fireworks": ("openai", "https://api.fireworks.ai/inference/v1", "FIREWORKS_API_KEY"),
+    "openrouter": ("openai", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
+    "ollama": ("openai", "http://localhost:11434/v1", None),
+    "vllm": ("openai", "http://localhost:8000/v1", None),
+}
+ALIASES = {"chatgpt": "openai", "claude": "anthropic", "grok": "xai", "google": "gemini", "sonar": "perplexity"}
+# Providers whose answers come from a live web search: caching them would serve stale news.
+LIVE_PROVIDERS = {"perplexity"}
+
+
 @dataclass
 class Tier:
     name: str
     model: str
-    base_url: str = "https://api.openai.com/v1"
-    api_key_env: str = "OPENAI_API_KEY"
+    provider: str = "openai"
+    base_url: str | None = None  # default: the provider's public endpoint
+    api_key_env: str | None = None  # default: the provider's usual variable, e.g. ANTHROPIC_API_KEY
     api_key: str | None = None
     timeout_s: float = 120.0
     headers: dict = field(default_factory=dict)
+    cache: bool | None = None  # None: on, except for live-search providers (Perplexity)
+    prompt_cache: bool = True  # Anthropic: mark long stable prefixes cacheable (cached reads cost 10%)
+    fallback: list = field(default_factory=list)  # tiers to try, in order, if this one fails; default: the strongest
+
+    def __post_init__(self):
+        self.provider = ALIASES.get(self.provider.lower(), self.provider.lower())
+        if self.provider not in PROVIDERS:
+            raise ValueError(f"tier {self.name!r}: unknown provider {self.provider!r}; known: {sorted(PROVIDERS)}")
+        _, url, env = PROVIDERS[self.provider]
+        if self.base_url is None:
+            self.base_url = url
+        if self.api_key_env is None:
+            self.api_key_env = env
+        if self.cache is None:
+            self.cache = self.provider not in LIVE_PROVIDERS
+
+    @property
+    def api_style(self) -> str:
+        return "mock" if self.base_url.startswith("mock://") else PROVIDERS[self.provider][0]
 
     def key(self) -> str | None:
-        return self.api_key or os.environ.get(self.api_key_env)
+        return self.api_key or (os.environ.get(self.api_key_env) if self.api_key_env else None)
 
 
 @dataclass
@@ -56,14 +99,25 @@ class CompressConfig:
 
 
 @dataclass
+class DriftConfig:
+    enabled: bool = True  # active whenever shadow traffic is on ([shadow] rate > 0)
+    epsilon: float | None = None  # default: the epsilon the router was certified at
+    alpha: float = 0.05  # false-alarm probability over the whole stream
+    judge: str = "llm"  # "llm": the judge tier grades the cheap answer against the strong one; "agreement": token overlap
+    judge_tier: str | None = None  # default: the strongest tier
+    action: str = "safe_mode"  # "safe_mode": route everything to the strongest tier on alarm; "alert": only report
+
+
+@dataclass
 class Config:
     tiers: list[Tier] = field(default_factory=list)  # ordered cheapest -> strongest
     router: RouterConfig = field(default_factory=RouterConfig)
     cache: CacheConfig = field(default_factory=CacheConfig)
     compress: CompressConfig = field(default_factory=CompressConfig)
+    drift: DriftConfig = field(default_factory=DriftConfig)
     prices: dict = field(default_factory=dict)
     ledger_path: str | None = None
-    shadow_rate: float = 0.0  # fraction of cheap-routed requests also sent to the strong tier
+    shadow_rate: float = 0.0  # fraction of cheaper-routed requests also sent to the strongest tier (feeds the drift guard)
     shadow_path: str = "thrift-shadow.jsonl"
     api_keys: list = field(default_factory=list)  # if set, clients must send one as Bearer token
     host: str = "127.0.0.1"
@@ -100,6 +154,7 @@ def from_dict(d: dict) -> Config:
         router=_section(RouterConfig, d.get("router")),
         cache=_section(CacheConfig, d.get("cache")),
         compress=_section(CompressConfig, d.get("compress")),
+        drift=_section(DriftConfig, d.get("drift")),
         prices=d.get("prices", {}),
         ledger_path=d.get("ledger", {}).get("path"),
         shadow_rate=float(d.get("shadow", {}).get("rate", 0.0)),
@@ -110,6 +165,17 @@ def from_dict(d: dict) -> Config:
     )
     if not cfg.tiers:
         raise ValueError("config needs at least one [[tier]] (cheapest first, strongest last)")
+    if cfg.drift.judge not in ("llm", "agreement") or cfg.drift.action not in ("safe_mode", "alert"):
+        raise ValueError('[drift] judge must be "llm" or "agreement", action "safe_mode" or "alert"')
+    names = [t.name for t in cfg.tiers]
+    if len(set(names)) != len(names):
+        raise ValueError(f"tier names must be unique: {names}")
+    for t in cfg.tiers:
+        bad = [f for f in t.fallback if f not in names]
+        if bad:
+            raise ValueError(f"tier {t.name!r}: fallback names unknown tiers {bad}")
+    if cfg.drift.judge_tier and cfg.drift.judge_tier not in names:
+        raise ValueError(f"[drift] judge_tier {cfg.drift.judge_tier!r} is not a tier")
     return cfg
 
 

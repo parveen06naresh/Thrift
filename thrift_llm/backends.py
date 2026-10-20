@@ -1,6 +1,10 @@
-"""Upstream backends. Anything that speaks the OpenAI chat-completions API works: OpenAI,
-Azure OpenAI (via base_url), Anthropic's OpenAI-compatible endpoint, Together, Groq, Fireworks,
-OpenRouter, and self-hosted vLLM / SGLang / TGI / llama.cpp / Ollama servers."""
+"""Upstream backends.
+
+OpenAIBackend serves every provider that speaks the OpenAI chat-completions API: OpenAI, xAI
+(Grok), Perplexity, Google Gemini, DeepSeek, Mistral, Groq, Together, Fireworks, OpenRouter, and
+self-hosted vLLM / SGLang / TGI / llama.cpp / Ollama. AnthropicBackend talks to Claude's native
+Messages API (see anthropic.py) so prompt caching works.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -12,10 +16,11 @@ from collections.abc import AsyncIterator
 
 import httpx
 
+from . import anthropic as ant
 from . import tokens as tok
 from .config import Tier
 
-RETRY_STATUS = {408, 409, 429, 500, 502, 503, 504}
+RETRY_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}  # 529: Anthropic overloaded
 
 
 class UpstreamError(Exception):
@@ -41,11 +46,10 @@ class OpenAIBackend:
     def _url(self, path: str) -> str:
         return self.tier.base_url.rstrip("/") + path
 
-    async def chat(self, body: dict) -> dict:
-        body = {**body, "model": self.tier.model, "stream": False}
+    async def _post(self, path: str, body: dict) -> dict:
         for attempt in range(self.max_retries + 1):
             try:
-                r = await self.client.post(self._url("/chat/completions"), headers=self._headers(), content=json.dumps(body))
+                r = await self.client.post(self._url(path), headers=self._headers(), content=json.dumps(body))
             except httpx.TransportError as e:
                 if attempt == self.max_retries:
                     raise UpstreamError(502, f"transport error: {e}") from e
@@ -57,19 +61,29 @@ class OpenAIBackend:
             await asyncio.sleep(min(8.0, 0.5 * 2**attempt) * (0.5 + random.random()))
         raise AssertionError("unreachable")
 
+    async def _events(self, path: str, body: dict) -> AsyncIterator[dict]:
+        try:
+            async with self.client.stream("POST", self._url(path), headers=self._headers(), content=json.dumps(body)) as r:
+                if r.status_code != 200:
+                    raise UpstreamError(r.status_code, await r.aread())
+                async for line in r.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    data = line[5:].strip()
+                    if data == "[DONE]":
+                        return
+                    yield json.loads(data)
+        except httpx.TransportError as e:
+            raise UpstreamError(502, f"transport error: {e}") from e
+
+    async def chat(self, body: dict) -> dict:
+        return await self._post("/chat/completions", {**body, "model": self.tier.model, "stream": False})
+
     async def stream(self, body: dict) -> AsyncIterator[dict]:
         body = {**body, "model": self.tier.model, "stream": True}
         body.setdefault("stream_options", {"include_usage": True})
-        async with self.client.stream("POST", self._url("/chat/completions"), headers=self._headers(), content=json.dumps(body)) as r:
-            if r.status_code != 200:
-                raise UpstreamError(r.status_code, await r.aread())
-            async for line in r.aiter_lines():
-                if not line.startswith("data:"):
-                    continue
-                data = line[5:].strip()
-                if data == "[DONE]":
-                    return
-                yield json.loads(data)
+        async for ev in self._events("/chat/completions", body):
+            yield ev
 
     async def passthrough(self, method: str, path: str, body: bytes, headers: dict) -> httpx.Response:
         h = {k: v for k, v in headers.items() if k.lower() in ("content-type", "accept")}
@@ -78,6 +92,30 @@ class OpenAIBackend:
 
     async def aclose(self) -> None:
         await self.client.aclose()
+
+
+class AnthropicBackend(OpenAIBackend):
+    """Claude through the native Messages API; requests and answers stay in OpenAI format."""
+
+    def _headers(self) -> dict:
+        h = {"content-type": "application/json", "anthropic-version": "2023-06-01", **self.tier.headers}
+        key = self.tier.key()
+        if key:
+            h["x-api-key"] = key
+        return h
+
+    async def chat(self, body: dict) -> dict:
+        req = ant.to_anthropic(body, self.tier.model, self.tier.prompt_cache)
+        return ant.from_anthropic(await self._post("/messages", req))
+
+    async def stream(self, body: dict) -> AsyncIterator[dict]:
+        req = {**ant.to_anthropic(body, self.tier.model, self.tier.prompt_cache), "stream": True}
+        tr = ant.StreamTranslator()
+        async for ev in self._events("/messages", req):
+            if ev.get("type") == "error":
+                raise UpstreamError(529 if (ev.get("error") or {}).get("type") == "overloaded_error" else 502, json.dumps(ev))
+            for chunk in tr.feed(ev):
+                yield chunk
 
 
 class MockBackend:
@@ -139,4 +177,7 @@ class MockBackend:
 
 
 def make_backend(tier: Tier):
-    return MockBackend(tier) if tier.base_url.startswith("mock://") else OpenAIBackend(tier)
+    style = tier.api_style
+    if style == "mock":
+        return MockBackend(tier)
+    return AnthropicBackend(tier) if style == "anthropic" else OpenAIBackend(tier)

@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import logging
 import random
 import time
 import uuid
@@ -21,10 +22,12 @@ from .backends import UpstreamError, make_backend
 from .cache import SemanticCache
 from .compress import Compressor
 from .config import Config
+from .drift import JUDGE_PROMPT, RiskMonitor, agreement_loss, parse_judgement
 from .ledger import Event, Ledger
 from .pricing import PriceBook
-from .router import Router
+from .router import Ladder, Router, load_policy
 
+log = logging.getLogger("thrift")
 THRIFT_KEYS = ("thrift",)
 SCOPE_PARAMS = (
     "temperature", "top_p", "max_tokens", "max_completion_tokens", "stop", "seed", "tools", "tool_choice",
@@ -70,12 +73,15 @@ class Result:
     status: int = 200
 
 
-def bundled_router() -> Router | None:
+BUNDLED = {"helm": "data/router_helm.json", "ladder": "data/ladder_helm.json"}
+
+
+def bundled_router(name: str = "helm") -> Router | Ladder | None:
     try:
-        p = resources.files("thrift_llm").joinpath("data/router_helm.json")
+        p = resources.files("thrift_llm").joinpath(BUNDLED[name])
         with resources.as_file(p) as f:
-            return Router.load(str(f))
-    except (FileNotFoundError, ValueError, ModuleNotFoundError):
+            return load_policy(str(f))
+    except (FileNotFoundError, ValueError, ModuleNotFoundError, KeyError):
         return None
 
 
@@ -95,9 +101,25 @@ class Gateway:
         tok.count("warm up")  # load the tokenizer now, not on the first request
         self.router = None
         if cfg.router.enabled and len(cfg.tiers) >= 2:
-            self.router = Router.load(cfg.router.path) if cfg.router.path else bundled_router()
+            p = cfg.router.path
+            if p and p.startswith("bundled:"):
+                self.router = bundled_router(p.split(":", 1)[1])
+                if self.router is None:
+                    raise ValueError(f"no bundled router {p!r}; choose from {['bundled:' + k for k in BUNDLED]}")
+            else:
+                self.router = load_policy(p) if p else bundled_router()
+            if isinstance(self.router, Ladder):
+                missing = [m for m in self.router.models if cfg.tier(m) is None]
+                if missing:
+                    raise ValueError(f"router ladder names tiers {missing} that are not in the config")
             if self.router is not None and cfg.router.threshold is not None:
                 self.router.threshold = cfg.router.threshold
+        self.monitor = None
+        d = cfg.drift
+        if d.enabled and cfg.shadow_rate > 0 and self.router is not None:
+            eps = d.epsilon or (self.router.certificate or {}).get("epsilon") or 0.02
+            self.monitor = RiskMonitor(eps, d.alpha)
+        self._tasks: set = set()
 
     # ---- helpers ------------------------------------------------------------------------------
     def _pick_tier(self, body: dict, opts: Options, text: str) -> tuple[str, bool, float | None]:
@@ -107,9 +129,26 @@ class Gateway:
             return (t.name if t else self.cfg.strong.name), False, None
         if not opts.route or self.router is None:
             return self.cfg.strong.name, False, None
-        score = self.router.score_one(text)
-        name = self.cfg.cheap.name if score >= self.router.threshold else self.cfg.strong.name
-        return name, True, score
+        if self.safe_mode:
+            return self.cfg.strong.name, True, None
+        name, score = self.router.route(text)
+        if isinstance(self.router, Router):  # two-tier routers name abstract "cheap" / "strong"
+            name = self.cfg.cheap.name if name == self.router.cheap else self.cfg.strong.name
+        return self.cfg.tier(name).name, True, score
+
+    @property
+    def safe_mode(self) -> bool:
+        return self.monitor is not None and self.monitor.alarm and self.cfg.drift.action == "safe_mode"
+
+    def _chain(self, tier: str) -> list[str]:
+        """Tiers to try in order: the chosen one, then its fallbacks (default: the strongest)."""
+        t = self.cfg.tier(tier)
+        rest = t.fallback or [self.cfg.strong.name]
+        out = [tier]
+        for n in rest:
+            if n not in out:
+                out.append(n)
+        return out
 
     @staticmethod
     def _scope(body: dict, tier: str) -> tuple[dict, str]:
@@ -120,15 +159,17 @@ class Gateway:
         scope = {"tier": tier, "prefix": prefix, "after": msgs[last + 1 :] if last is not None else [], **{k: body.get(k) for k in SCOPE_PARAMS if k in body}}
         return scope, query
 
-    def _cacheable(self, body: dict, opts: Options) -> bool:
+    def _cacheable(self, body: dict, opts: Options, tier: str) -> bool:
         if self.cache is None or not opts.cache:
+            return False
+        if not all(self.cfg.tier(n).cache for n in self._chain(tier)):
             return False
         if (body.get("n") or 1) > 1:
             return False
         return float(body.get("temperature", 1.0) or 0.0) <= self.cfg.cache.max_temperature
 
-    def _cost(self, tier: str, tin: int, tout: int) -> float:
-        return self.prices.cost(self.cfg.tier(tier).model, tin, tout)
+    def _cost(self, tier: str, tin: int, tout: int, usage: dict | None = None) -> float:
+        return self.prices.cost(self.cfg.tier(tier).model, tin, tout, usage)
 
     # ---- main entry ---------------------------------------------------------------------------
     async def chat(self, body: dict, headers: dict | None = None) -> Result:
@@ -143,7 +184,7 @@ class Gateway:
 
         tier, routed, score = self._pick_tier(body, opts, last_text)
         strong = self.cfg.strong.name
-        cacheable = self._cacheable(body, opts)
+        cacheable = self._cacheable(body, opts, tier)
 
         # 1. cache (scoped to the tier the request would be served by)
         scope, query = self._scope(body, tier)
@@ -157,7 +198,7 @@ class Gateway:
                 overhead = (time.perf_counter() - t0) * 1000
                 self.ledger.record(
                     Event(rid, time.time(), tier, self.cfg.tier(tier).model, hit.kind, routed, score, original_tokens, 0, out_tokens,
-                          0.0, baseline, overhead, 0.0), self.cfg.cheap.name)
+                          0.0, baseline, overhead, 0.0), self.cfg.strong.name)
                 hdr = self._headers(rid, tier, hit.kind, original_tokens, 0, 0.0, baseline, score)
                 hdr["x-thrift-cache-similarity"] = f"{hit.similarity:.3f}"
                 resp["usage"] = {**(resp.get("usage") or {}), "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
@@ -179,61 +220,70 @@ class Gateway:
             return Result(None, self._stream(send, tier, routed, score, rid, original_tokens, overhead, scope, query, cacheable),
                           self._headers(rid, tier, "miss" if cacheable else "off", original_tokens, None, None, None, score))
         t1 = time.perf_counter()
-        fallback = False
-        try:
-            resp = await self.backends[tier].chat(send)
-        except UpstreamError as e:
-            if tier == strong:
-                self._record_error(rid, tier, routed, score, original_tokens, overhead, e.status)
-                return Result(_error_body(e), None, {"x-thrift-request-id": rid}, e.status)
-            fallback, tier = True, strong
+        chosen = tier
+        resp = None
+        for tier in self._chain(chosen):
             try:
                 resp = await self.backends[tier].chat(send)
-            except UpstreamError as e2:
-                self._record_error(rid, tier, routed, score, original_tokens, overhead, e2.status)
-                return Result(_error_body(e2), None, {"x-thrift-request-id": rid}, e2.status)
+                break
+            except UpstreamError as e:
+                err = e
+        if resp is None:
+            self._record_error(rid, tier, routed, score, original_tokens, overhead, err.status)
+            return Result(_error_body(err), None, {"x-thrift-request-id": rid}, err.status)
+        fallback = tier != chosen
         upstream_ms = (time.perf_counter() - t1) * 1000
         usage = resp.get("usage") or {}
         tin = int(usage.get("prompt_tokens", tok.count_messages(send.get("messages", []))))
         tout = int(usage.get("completion_tokens", 0))
-        cost = self._cost(tier, tin, tout)
+        cost = self._cost(tier, tin, tout, usage)
         baseline = self._cost(strong, original_tokens, tout)
         self.ledger.record(Event(rid, time.time(), tier, self.cfg.tier(tier).model, "miss" if cacheable else "off", routed, score,
                                  original_tokens, tin, tout, cost, baseline, overhead, upstream_ms, 200, fallback,
-                                 self._cost(strong, tin, tout)), self.cfg.cheap.name)
+                                 self._cost(strong, tin, tout), self._cost(tier, tin, tout)), strong)
         if cacheable and not fallback and _complete(resp):
             self.cache.put(scope, query, resp)
-        self._maybe_shadow(send, tier, resp)
+        if routed:
+            self._after_routed(send, tier, _text(resp))
         hdr = self._headers(rid, tier, "miss" if cacheable else "off", original_tokens, tin, cost, baseline, score)
         if fallback:
             hdr["x-thrift-fallback"] = "1"
+        if self.safe_mode:
+            hdr["x-thrift-safe-mode"] = "1"
         return Result(resp, None, hdr)
 
     async def _stream(self, send, tier, routed, score, rid, original_tokens, overhead, scope, query, cacheable):
         t1 = time.perf_counter()
         parts, usage, finish, first = [], None, None, None
-        try:
-            async for chunk in self.backends[tier].stream(send):
-                first = first or chunk
-                for ch in chunk.get("choices") or []:
-                    parts.append((ch.get("delta") or {}).get("content") or "")
-                    finish = ch.get("finish_reason") or finish
-                usage = chunk.get("usage") or usage
-                yield chunk
-        except UpstreamError as e:
-            self._record_error(rid, tier, routed, score, original_tokens, overhead, e.status)
-            body = _error_body(e)
-            yield body if "error" in body else {"error": body}
-            return
+        chain = self._chain(tier)
+        for i, tier in enumerate(chain):
+            try:
+                async for chunk in self.backends[tier].stream(send):
+                    first = first or chunk
+                    for ch in chunk.get("choices") or []:
+                        parts.append((ch.get("delta") or {}).get("content") or "")
+                        finish = ch.get("finish_reason") or finish
+                    usage = chunk.get("usage") or usage
+                    yield chunk
+                break
+            except UpstreamError as e:
+                if first is None and i + 1 < len(chain):
+                    continue  # nothing sent to the client yet: fall back silently
+                self._record_error(rid, tier, routed, score, original_tokens, overhead, e.status)
+                body = _error_body(e)
+                yield body if "error" in body else {"error": body}
+                return
         text = "".join(parts)
         tin = int((usage or {}).get("prompt_tokens", tok.count_messages(send.get("messages", []))))
         tout = int((usage or {}).get("completion_tokens", tok.count(text)))
-        cost = self._cost(tier, tin, tout)
+        cost = self._cost(tier, tin, tout, usage)
         baseline = self._cost(self.cfg.strong.name, original_tokens, tout)
         self.ledger.record(Event(rid, time.time(), tier, self.cfg.tier(tier).model, "miss" if cacheable else "off", routed, score,
                                  original_tokens, tin, tout, cost, baseline, overhead, (time.perf_counter() - t1) * 1000, 200, False,
-                                 self._cost(self.cfg.strong.name, tin, tout)), self.cfg.cheap.name)
-        if cacheable and finish == "stop" and first is not None:
+                                 self._cost(self.cfg.strong.name, tin, tout), self._cost(tier, tin, tout)), self.cfg.strong.name)
+        if routed and finish in ("stop", "length"):
+            self._after_routed(send, tier, text)
+        if cacheable and finish == "stop" and first is not None and tier == chain[0]:
             self.cache.put(scope, query, {
                 "id": first.get("id"), "object": "chat.completion", "created": first.get("created"), "model": first.get("model"),
                 "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": finish}],
@@ -242,24 +292,67 @@ class Gateway:
 
     def _record_error(self, rid, tier, routed, score, original_tokens, overhead, status):
         self.ledger.record(Event(rid, time.time(), tier, self.cfg.tier(tier).model, "off", routed, score, original_tokens, 0, 0,
-                                 0.0, 0.0, overhead, 0.0, status), self.cfg.cheap.name)
+                                 0.0, 0.0, overhead, 0.0, status), self.cfg.strong.name)
 
-    def _maybe_shadow(self, send: dict, tier: str, resp: dict) -> None:
-        """Send a sample of cheap-routed requests to the strong tier too and log both answers,
-        so the router can be re-calibrated on your own traffic (`thrift-llm calibrate`)."""
-        if tier == self.cfg.strong.name or self.cfg.shadow_rate <= 0 or random.random() >= self.cfg.shadow_rate:
+    def _after_routed(self, send: dict, tier: str, answer: str) -> None:
+        """Shadow sampling + drift guard. Each routed request is one observation for the risk
+        monitor: 0 when the strongest model answered (no loss), and for a random fraction
+        `shadow_rate` of the rest, the judged loss divided by that rate (see drift.py)."""
+        r = self.cfg.shadow_rate
+        if self.safe_mode:
             return
+        if tier == self.cfg.strong.name:
+            if self.monitor is not None:
+                self.monitor.observe(0.0)
+            return
+        if r <= 0 or random.random() >= r:
+            if self.monitor is not None:
+                self.monitor.observe(0.0)
+            return
+        task = asyncio.get_running_loop().create_task(self._shadow(send, tier, answer, r))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
 
-        async def run():
-            try:
-                strong = await self.backends[self.cfg.strong.name].chat(send)
-            except UpstreamError:
-                return
-            row = {"messages": send.get("messages"), "cheap": _text(resp), "strong": _text(strong), "ts": time.time()}
-            with open(self.cfg.shadow_path, "a") as f:
-                f.write(json.dumps(row) + "\n")
+    async def _shadow(self, send: dict, tier: str, answer: str, rate: float) -> None:
+        try:
+            strong = _text(await self.backends[self.cfg.strong.name].chat(send))
+        except UpstreamError:
+            if self.monitor is not None:
+                self.monitor.observe(0.0)  # keep the sampling unbiased: count it, as unjudged
+            return
+        loss = await self._judge(send, strong, answer) if self.monitor is not None else None
+        if self.monitor is not None:
+            if self.monitor.observe((loss or 0.0) / rate, judged=loss is not None):
+                log.warning("thrift drift guard: routing risk above epsilon=%.3f (e-value %.1f); %s", self.monitor.epsilon,
+                            self.monitor.e_value, "safe mode on" if self.cfg.drift.action == "safe_mode" else "alert only")
+        row = {"messages": send.get("messages"), "tier": tier, "cheap": answer, "strong": strong, "loss": loss, "ts": time.time()}
+        with open(self.cfg.shadow_path, "a") as f:
+            f.write(json.dumps(row) + "\n")
 
-        asyncio.get_running_loop().create_task(run())
+    async def _judge(self, send: dict, reference: str, candidate: str) -> float | None:
+        if self.cfg.drift.judge == "agreement":
+            return agreement_loss(reference, candidate)
+        q = next((tok.content_text(m.get("content")) for m in reversed(send.get("messages") or []) if m.get("role") == "user"), "")
+        prompt = JUDGE_PROMPT.format(q=q[-4000:], a=reference[:4000], b=candidate[:4000])
+        judge = self.cfg.drift.judge_tier or self.cfg.strong.name
+        try:
+            r = await self.backends[judge].chat({"messages": [{"role": "user", "content": prompt}], "max_tokens": 5, "temperature": 0})
+        except UpstreamError:
+            return None
+        return parse_judgement(_text(r))
+
+    def reset_drift(self) -> None:
+        if self.monitor is not None:
+            self.monitor.reset()
+
+    def stats(self) -> dict:
+        s = self.ledger.stats()
+        s["drift"] = self.monitor.state() if self.monitor is not None else None
+        s["router"] = None if self.router is None else {
+            "kind": "ladder" if isinstance(self.router, Ladder) else "two-tier", "tiers": self.router.tiers,
+            "threshold": self.router.threshold, "certificate": self.router.certificate}
+        s["unpriced_models"] = sorted(self.prices.unknown)
+        return s
 
     def _headers(self, rid, tier, cache, original, sent, cost, baseline, score) -> dict:
         h = {"x-thrift-request-id": rid, "x-thrift-tier": tier, "x-thrift-model": self.cfg.tier(tier).model, "x-thrift-cache": cache,
@@ -274,6 +367,8 @@ class Gateway:
         return h
 
     async def aclose(self) -> None:
+        for t in list(self._tasks):
+            t.cancel()
         for b in self.backends.values():
             await b.aclose()
 

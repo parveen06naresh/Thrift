@@ -1,0 +1,233 @@
+{
+ "splits": 20,
+ "delta": 0.1,
+ "n_questions": 8021,
+ "ladders": {
+  "to_gpt4o": {
+   "models": [
+    "gemini-1.5-flash-002",
+    "gpt-4o-mini-2024-07-18",
+    "deepseek-v3",
+    "claude-3-5-haiku-20241022",
+    "gemini-1.5-pro-002",
+    "mistral-large-2407",
+    "gpt-4o-2024-08-06"
+   ],
+   "singles": [
+    {
+     "model": "gemini-1.5-flash-002",
+     "accuracy": 0.6094917258201343,
+     "cost_per_1k": 0.09818416344595436,
+     "drop_vs_ref": 0.1460362413648112,
+     "clipped_drop_vs_ref": 0.1954141025597827,
+     "cost_saved": 0.9712783830980742
+    },
+    {
+     "model": "gpt-4o-mini-2024-07-18",
+     "accuracy": 0.6812871195956683,
+     "cost_per_1k": 0.2093044570502431,
+     "drop_vs_ref": 0.07424084758927718,
+     "clipped_drop_vs_ref": 0.10994152286151883,
+     "cost_saved": 0.9387725859214381
+    },
+    {
+     "model": "deepseek-v3",
+     "accuracy": 0.7478627498223931,
+     "cost_per_1k": 0.3331007605036779,
+     "drop_vs_ref": 0.0076652173625524345,
+     "clipped_drop_vs_ref": 0.06275110349510686,
+     "cost_saved": 0.9025587009437319
+    },
+    {
+     "model": "claude-3-5-haiku-20241022",
+     "accuracy": 0.6558870962045475,
+     "cost_per_1k": 1.174348335619,
+     "drop_vs_ref": 0.09964087098039798,
+     "clipped_drop_vs_ref": 0.15289880632453998,
+     "cost_saved": 0.6564702308266925
+    },
+    {
+     "model": "gemini-1.5-pro-002",
+     "accuracy": 0.7343805770899469,
+     "cost_per_1k": 1.6364027240992396,
+     "drop_vs_ref": 0.021147390094998664,
+     "clipped_drop_vs_ref": 0.09486726536298802,
+     "cost_saved": 0.5213063849679047
+    },
+    {
+     "model": "mistral-large-2407",
+     "accuracy": 0.6889773564474353,
+     "cost_per_1k": 3.2291118314424634,
+     "drop_vs_ref": 0.06655061073751023,
+     "clipped_drop_vs_ref": 0.10993414991981633,
+     "cost_saved": 0.0553943762303587
+    },
+    {
+     "model": "gpt-4o-2024-08-06",
+     "accuracy": 0.7555279671849455,
+     "cost_per_1k": 3.4184761875077925,
+     "drop_vs_ref": 0.0,
+     "clipped_drop_vs_ref": 0.0,
+     "cost_saved": 0.0
+    }
+   ],
+   "results": [
+    {
+     "eps": 0.01,
+     "delta": 0.1,
+     "splits": 20,
+     "share": {
+      "gemini-1.5-flash-002": 0.022308075772681957,
+      "gpt-4o-mini-2024-07-18": 0.02362911266201396,
+      "deepseek-v3": 0.05241774675972084,
+      "claude-3-5-haiku-20241022": 0.0020189431704885344,
+      "gemini-1.5-pro-002": 0.007278165503489531,
+      "mistral-large-2407": 0.006679960119641076,
+      "gpt-4o-2024-08-06": 0.885667996011964
+     },
+     "quality_drop": -0.0005336878000462286,
+     "clipped_drop": 0.006030702673365158,
+     "cost_saved": 0.2540535080372347,
+     "violation_rate": 0.1
+    },
+    {
+     "eps": 0.02,
+     "delta": 0.1,
+     "splits": 20,
+     "share": {
+      "gemini-1.5-flash-002": 0.047507477567298104,
+      "gpt-4o-mini-2024-07-18": 0.05142073778664007,
+      "deepseek-v3": 0.14082751744765704,
+      "claude-3-5-haiku-20241022": 0.003389830508474576,
+      "gemini-1.5-pro-002": 0.015378863409770691,
+      "mistral-large-2407": 0.012662013958125624,
+      "gpt-4o-2024-08-06": 0.7288135593220338
+     },
+     "quality_drop": -0.0005268788885407494,
+     "clipped_drop": 0.014370460405447863,
+     "cost_saved": 0.46244766242214624,
+     "violation_rate": 0.05
+    },
+    {
+     "eps": 0.05,
+     "delta": 0.1,
+     "splits": 20,
+     "share": {
+      "gemini-1.5-flash-002": 0.11961615154536394,
+      "gpt-4o-mini-2024-07-18": 0.1507726819541376,
+      "deepseek-v3": 0.32948654037886344,
+      "claude-3-5-haiku-20241022": 0.006281156530408774,
+      "gemini-1.5-pro-002": 0.029885343968095716,
+      "mistral-large-2407": 0.02031405782652044,
+      "gpt-4o-2024-08-06": 0.3436440677966103
+     },
+     "quality_drop": 0.009463738369442481,
+     "clipped_drop": 0.04219775600113931,
+     "cost_saved": 0.7517474626873716,
+     "violation_rate": 0.05
+    }
+   ]
+  },
+  "to_claude_sonnet": {
+   "models": [
+    "gemini-1.5-flash-002",
+    "gpt-4o-mini-2024-07-18",
+    "deepseek-v3",
+    "gemini-1.5-pro-002",
+    "claude-3-5-sonnet-20241022"
+   ],
+   "singles": [
+    {
+     "model": "gemini-1.5-flash-002",
+     "accuracy": 0.6094917258201343,
+     "cost_per_1k": 0.09818416344595436,
+     "drop_vs_ref": 0.11001279500302419,
+     "clipped_drop_vs_ref": 0.1923170256941603,
+     "cost_saved": 0.9769483058332319
+    },
+    {
+     "model": "gpt-4o-mini-2024-07-18",
+     "accuracy": 0.6812871195956683,
+     "cost_per_1k": 0.2093044570502431,
+     "drop_vs_ref": 0.03821740122749018,
+     "clipped_drop_vs_ref": 0.11027454631721276,
+     "cost_saved": 0.9508594648838712
+    },
+    {
+     "model": "deepseek-v3",
+     "accuracy": 0.7478627498223931,
+     "cost_per_1k": 0.3331007605036779,
+     "drop_vs_ref": -0.02835822899923457,
+     "clipped_drop_vs_ref": 0.05638376488669297,
+     "cost_saved": 0.9217945482412211
+    },
+    {
+     "model": "gemini-1.5-pro-002",
+     "accuracy": 0.7343805770899469,
+     "cost_per_1k": 1.6364027240992396,
+     "drop_vs_ref": -0.01487605626678834,
+     "clipped_drop_vs_ref": 0.08909999361984751,
+     "cost_saved": 0.6158050972205318
+    },
+    {
+     "model": "claude-3-5-sonnet-20241022",
+     "accuracy": 0.7195045208231585,
+     "cost_per_1k": 4.259303578107468,
+     "drop_vs_ref": 0.0,
+     "clipped_drop_vs_ref": 0.0,
+     "cost_saved": 0.0
+    }
+   ],
+   "results": [
+    {
+     "eps": 0.01,
+     "delta": 0.1,
+     "splits": 20,
+     "share": {
+      "gemini-1.5-flash-002": 0.025772681954137584,
+      "gpt-4o-mini-2024-07-18": 0.022731804586241276,
+      "deepseek-v3": 0.05760219341974078,
+      "gemini-1.5-pro-002": 0.015129611166500499,
+      "claude-3-5-sonnet-20241022": 0.87876370887338
+     },
+     "quality_drop": -0.015768500890462462,
+     "clipped_drop": 0.005183626019171486,
+     "cost_saved": 0.26765626711231605,
+     "violation_rate": 0.1
+    },
+    {
+     "eps": 0.02,
+     "delta": 0.1,
+     "splits": 20,
+     "share": {
+      "gemini-1.5-flash-002": 0.05199401794616151,
+      "gpt-4o-mini-2024-07-18": 0.051669990029910275,
+      "deepseek-v3": 0.15388833499501497,
+      "gemini-1.5-pro-002": 0.030658025922233306,
+      "claude-3-5-sonnet-20241022": 0.7117896311066799
+     },
+     "quality_drop": -0.021924887051939578,
+     "clipped_drop": 0.01374073151230048,
+     "cost_saved": 0.4878333894650342,
+     "violation_rate": 0.05
+    },
+    {
+     "eps": 0.05,
+     "delta": 0.1,
+     "splits": 20,
+     "share": {
+      "gemini-1.5-flash-002": 0.1417248255234297,
+      "gpt-4o-mini-2024-07-18": 0.15137088733798604,
+      "deepseek-v3": 0.3558325024925224,
+      "gemini-1.5-pro-002": 0.05503489531405783,
+      "claude-3-5-sonnet-20241022": 0.29603688933200395
+     },
+     "quality_drop": -0.019653639018748392,
+     "clipped_drop": 0.041621780581383216,
+     "cost_saved": 0.8081153229750413,
+     "violation_rate": 0.1
+    }
+   ]
+  }
+ }
+}

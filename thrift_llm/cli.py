@@ -9,8 +9,12 @@ import threading
 import time
 from importlib import resources
 
-EXAMPLE_CONFIG = '''# Thrift gateway config. Tiers are ordered cheapest -> strongest.
-# Clients call model "thrift-auto" to let Thrift route, or a tier name to pin one.
+EXAMPLE_CONFIG = '''# Thrift gateway config. Tiers are ordered cheapest -> strongest; the last one is the quality
+# reference and the default fallback. Clients call model "thrift-auto" to let Thrift route, or a
+# tier name to pin one. Providers: openai (chatgpt), anthropic (claude), xai (grok), perplexity,
+# gemini (google), deepseek, mistral, groq, together, fireworks, openrouter, ollama, vllm.
+# Each reads its usual key variable (OPENAI_API_KEY, ANTHROPIC_API_KEY, XAI_API_KEY, ...).
+# Five-vendor setup with the certified ladder: examples/multi_provider.toml
 
 [server]
 host = "127.0.0.1"
@@ -19,26 +23,41 @@ port = 8787
 
 [[tier]]
 name = "cheap"
+provider = "openai"
 model = "gpt-4o-mini"
-base_url = "https://api.openai.com/v1"
-api_key_env = "OPENAI_API_KEY"
+
+# More providers, callable by name (model = "claude", "grok", ...):
+# [[tier]]
+# name = "claude"
+# provider = "anthropic"           # native API with prompt caching
+# model = "claude-sonnet-4-5"
+#
+# [[tier]]
+# name = "grok"
+# provider = "xai"
+# model = "grok-4"
+#
+# [[tier]]
+# name = "sonar"
+# provider = "perplexity"          # live web answers are never cached
+# model = "sonar-pro"
+#
+# Self-hosted (vLLM / SGLang / Ollama):
+# [[tier]]
+# name = "local"
+# provider = "vllm"
+# model = "meta-llama/Llama-3.1-8B-Instruct"
+# base_url = "http://localhost:8000/v1"
 
 [[tier]]
 name = "strong"
+provider = "openai"
 model = "gpt-4o"
-base_url = "https://api.openai.com/v1"
-api_key_env = "OPENAI_API_KEY"
-
-# Self-hosted example (vLLM / SGLang / Ollama all speak this API):
-# [[tier]]
-# name = "cheap"
-# model = "meta-llama/Llama-3.1-8B-Instruct"
-# base_url = "http://localhost:8000/v1"
-# api_key_env = "VLLM_API_KEY"
+# fallback = ["claude"]            # if OpenAI is down, answer with Claude instead
 
 [router]
 enabled = true
-# path = "router.json"      # from `thrift-llm calibrate`; default is the bundled HELM-calibrated router
+# path = "router.json"      # from `thrift-llm calibrate`; default is the bundled HELM-certified router
 
 [cache]
 enabled = true
@@ -56,10 +75,16 @@ min_tokens = 500            # only messages longer than this are candidates
 # path = "thrift-ledger.sqlite"
 
 [shadow]
-rate = 0.0                  # e.g. 0.02: also send 2% of cheap-routed requests to the strong tier, for recalibration
+rate = 0.0                  # e.g. 0.05: also answer 5% of cheaper-routed requests with the strongest tier;
+                            # feeds the drift guard and gives data for re-calibration
+
+[drift]
+alpha = 0.05                # chance of a false alarm over the whole stream
+judge = "llm"               # "llm" (strongest tier grades) or "agreement" (token overlap, no extra calls)
+action = "safe_mode"        # on alarm route everything to the strongest tier; "alert" only reports
 
 [prices]                    # USD per 1M tokens [input, output]; extends the built-in table
-# "my-finetune" = [0.30, 1.20]
+# "grok-4" = [3.00, 15.00]
 '''
 
 
@@ -132,10 +157,29 @@ def cmd_demo(a) -> None:
 
 
 def cmd_calibrate(a) -> None:
-    """Fit + calibrate a router from JSONL rows {"prompt", "q_cheap", "q_strong"} (quality in [0, 1])."""
+    """Fit + calibrate a router from JSONL rows {"prompt", "q_cheap", "q_strong"} (quality in [0, 1]),
+    or with --ladder a,b,c a multi-model ladder from rows {"prompt", "q": {"a": .., "b": .., "c": ..}}."""
     import numpy as np
 
-    from .router import Router
+    from .router import Ladder, Router
+
+    if a.ladder:
+        names = [n.strip() for n in a.ladder.split(",") if n.strip()]
+        rows = [json.loads(line) for line in open(a.data) if line.strip()]
+        T = [r["prompt"] for r in rows]
+        Q = np.array([[float(r["q"][n]) for n in names] for r in rows])
+        idx = np.random.default_rng(a.seed).permutation(len(rows))
+        cut = int(len(rows) * (1 - a.cal_frac))
+        tr, ca = idx[:cut], idx[cut:]
+        lad = Ladder(names).fit([T[i] for i in tr], Q[tr], seed=a.seed)
+        cert = lad.calibrate([T[i] for i in ca], Q[ca], a.epsilon, a.delta)
+        lad.meta = {"source": a.data, "n_train": len(tr), "n_cal": len(ca)}
+        lad.save(a.out)
+        S = lad.scores([T[i] for i in ca])
+        share = np.bincount(Ladder.choose(S, lad.threshold), minlength=len(names)) / len(ca)
+        print(json.dumps({"out": a.out, "threshold": lad.threshold, "share_on_cal": dict(zip(names, share.tolist())), **cert.to_dict()},
+                         indent=2))
+        return
 
     rows = [json.loads(line) for line in open(a.data) if line.strip()]
     rng = np.random.default_rng(a.seed)
@@ -185,6 +229,7 @@ def main(argv=None) -> None:
     d.set_defaults(fn=cmd_demo)
     c = sub.add_parser("calibrate", help="train + certify a router on your own labelled prompts")
     c.add_argument("--data", required=True, help='JSONL: {"prompt": ..., "q_cheap": 0..1, "q_strong": 0..1}')
+    c.add_argument("--ladder", help='comma-separated tier names, cheapest first; rows then carry "q": {name: 0..1}')
     c.add_argument("--out", default="router.json")
     c.add_argument("--epsilon", type=float, default=0.02, help="max expected quality drop (absolute, e.g. 0.02 = 2 points)")
     c.add_argument("--delta", type=float, default=0.1, help="allowed probability that the guarantee fails")

@@ -83,8 +83,40 @@ def cache():
     fig.savefig("docs/figures/cache.png", bbox_inches="tight")
 
 
+def ladder():
+    L = json.load(open("results/ladder.json"))["ladders"]
+    R = json.load(open("results/router.json"))["pairs"][0]
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.6))
+    for ax, key, title in [(axes[0], "to_gpt4o", "reference: GPT-4o"), (axes[1], "to_claude_sonnet", "reference: Claude 3.5 Sonnet")]:
+        d = L[key]
+        ref = d["singles"][-1]
+        for s in d["singles"]:
+            ax.scatter([s["cost_per_1k"]], [100 * s["accuracy"]], color=MUTED, s=22, zorder=3)
+            ax.annotate(s["model"].replace("-2024-07-18", "").replace("-2024-08-06", "").replace("-20241022", "").replace("-002", "")
+                        .replace("-2407", ""), (s["cost_per_1k"], 100 * s["accuracy"]), textcoords="offset points", xytext=(4, -10),
+                        fontsize=7, color=MUTED)
+        xs = [ref["cost_per_1k"] * (1 - r["cost_saved"]) for r in d["results"]]
+        ys = [100 * (ref["accuracy"] - r["quality_drop"]) for r in d["results"]]
+        ax.plot(xs, ys, color=ACC, lw=2, marker="o", ms=5, label="Thrift ladder (certified)", zorder=4)
+        for r, x, y in zip(d["results"], xs, ys):
+            ax.annotate(f"ε={int(100 * r['eps'])}: −{100 * r['cost_saved']:.0f}%", (x, y), textcoords="offset points",
+                        xytext=(-8, -14) if r["eps"] == 0.01 else (-14, 7), fontsize=8, color=INK)
+        if key == "to_gpt4o":
+            p = next(r for r in R["results"] if r["eps"] == 0.02)
+            x = R["cost_per_1k_questions_strong"] * (1 - p["cost_saved"]["mean"])
+            y = 100 * (R["accuracy_strong"] - p["quality_drop"]["mean"])
+            ax.scatter([x], [y], color=BLUE, marker="s", s=26, zorder=5, label="two-tier GPT-4o-mini → GPT-4o, ε=2")
+        ax.set_xscale("log")
+        ax.set_xlabel("cost per 1,000 questions (USD, log scale)")
+        ax.set_title(title, fontsize=9.5, color=INK)
+        ax.legend(frameon=False, fontsize=7.5, loc="lower right")
+    axes[0].set_ylabel("accuracy (%)")
+    fig.tight_layout()
+    fig.savefig("docs/figures/ladder.png", bbox_inches="tight")
+
+
 if __name__ == "__main__":
-    for f in (routing, cache, compression):
+    for f in (routing, cache, compression, ladder):
         try:
             f()
             print("ok", f.__name__)

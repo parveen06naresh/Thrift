@@ -63,10 +63,11 @@ def create_app(cfg: Config, gateway: Gateway | None = None) -> Starlette:
         return Response(r.content, status_code=r.status_code, media_type=r.headers.get("content-type"))
 
     async def stats(request: Request) -> Response:
-        s = gw.ledger.stats()
+        s = gw.stats()
         s["config"] = {
-            "tiers": [{"name": t.name, "model": t.model, "price": gw.prices.lookup(t.model)} for t in cfg.tiers],
-            "router": None if gw.router is None else {"threshold": gw.router.threshold, "certificate": gw.router.certificate, "meta": gw.router.meta},
+            "tiers": [{"name": t.name, "model": t.model, "provider": t.provider, "price": gw.prices.lookup(t.model)} for t in cfg.tiers],
+            "router": None if gw.router is None else {"tiers": gw.router.tiers, "threshold": gw.router.threshold,
+                                                      "certificate": gw.router.certificate, "meta": gw.router.meta},
             "cache": None if gw.cache is None else {"entries": len(gw.cache), "threshold": gw.cache.threshold, "semantic": gw.cache.semantic},
             "compress": None if gw.compressor is None else {"keep_ratio": gw.compressor.keep_ratio, "min_tokens": gw.compressor.min_tokens},
             "tokenizer": tok.backend(),
@@ -76,7 +77,13 @@ def create_app(cfg: Config, gateway: Gateway | None = None) -> Starlette:
         return JSONResponse(s)
 
     async def metrics(request: Request) -> Response:
-        return PlainTextResponse(gw.ledger.prometheus(), media_type="text/plain; version=0.0.4")
+        text = gw.ledger.prometheus()
+        if gw.monitor is not None:
+            d = gw.monitor.state()
+            text += (f"# TYPE thrift_drift_e_value gauge\nthrift_drift_e_value {d['e_value']:.6f}\n"
+                     f"# TYPE thrift_drift_risk_estimate gauge\nthrift_drift_risk_estimate {d['risk_estimate']:.6f}\n"
+                     f"# TYPE thrift_safe_mode gauge\nthrift_safe_mode {int(gw.safe_mode)}\n")
+        return PlainTextResponse(text, media_type="text/plain; version=0.0.4")
 
     async def dashboard(request: Request) -> Response:
         html = resources.files("thrift_llm").joinpath("dashboard.html").read_text()
@@ -88,6 +95,13 @@ def create_app(cfg: Config, gateway: Gateway | None = None) -> Starlette:
         if gw.cache is not None:
             gw.cache.clear()
         return JSONResponse({"ok": True})
+
+    async def drift_reset(request: Request) -> Response:
+        """Leave safe mode, e.g. after re-calibrating the router on recent traffic."""
+        if not authorized(request):
+            return unauthorized()
+        gw.reset_drift()
+        return JSONResponse({"ok": True, "drift": gw.monitor.state() if gw.monitor else None})
 
     async def health(request: Request) -> Response:
         return JSONResponse({"ok": True, "version": __version__})
@@ -105,6 +119,7 @@ def create_app(cfg: Config, gateway: Gateway | None = None) -> Starlette:
             Route("/v1/{path:path}", passthrough, methods=["GET", "POST"]),
             Route("/thrift/stats", stats),
             Route("/thrift/cache/clear", clear_cache, methods=["POST"]),
+            Route("/thrift/drift/reset", drift_reset, methods=["POST"]),
             Route("/metrics", metrics),
             Route("/healthz", health),
             Route("/", dashboard),

@@ -1,0 +1,152 @@
+{
+ "epsilon": 0.02,
+ "delta": 0.1,
+ "alpha": 0.05,
+ "stream_length": 6000,
+ "shift_at": 2000,
+ "runs": 100,
+ "worlds": {
+  "no_drift": {
+   "true_risk_before": 0.015903049449777686,
+   "true_risk_after": 0.015903049449777686,
+   "cheaper_share_after": 0.28364905284147557,
+   "by_rate": [
+    {
+     "rate": 0.05,
+     "alarm_rate": 0.0,
+     "false_alarm_rate_before_shift": 0.0,
+     "detected_after_shift": 0.0,
+     "median_delay": null,
+     "p90_delay": null,
+     "risk_after_without_guard": 0.015993646364600312,
+     "risk_after_with_guard": 0.015993646364600312,
+     "shadow_cost_share": 0.05016738694792038
+    },
+    {
+     "rate": 0.1,
+     "alarm_rate": 0.0,
+     "false_alarm_rate_before_shift": 0.0,
+     "detected_after_shift": 0.0,
+     "median_delay": null,
+     "p90_delay": null,
+     "risk_after_without_guard": 0.015827004862096965,
+     "risk_after_with_guard": 0.015827004862096965,
+     "shadow_cost_share": 0.10029536721917041
+    },
+    {
+     "rate": 0.2,
+     "alarm_rate": 0.0,
+     "false_alarm_rate_before_shift": 0.0,
+     "detected_after_shift": 0.0,
+     "median_delay": null,
+     "p90_delay": null,
+     "risk_after_without_guard": 0.015727266589404747,
+     "risk_after_with_guard": 0.015727266589404747,
+     "shadow_cost_share": 0.201480746349421
+    }
+   ]
+  },
+  "model_swap": {
+   "true_risk_before": 0.015903049449777686,
+   "true_risk_after": 0.07190531222536108,
+   "cheaper_share_after": 0.28364905284147557,
+   "by_rate": [
+    {
+     "rate": 0.05,
+     "alarm_rate": 0.58,
+     "false_alarm_rate_before_shift": 0.0,
+     "detected_after_shift": 0.58,
+     "median_delay": 2780.0,
+     "p90_delay": 3659.3,
+     "risk_after_without_guard": 0.07175656032074461,
+     "risk_after_with_guard": 0.058956626849013996,
+     "shadow_cost_share": 0.041901075868474476
+    },
+    {
+     "rate": 0.1,
+     "alarm_rate": 0.97,
+     "false_alarm_rate_before_shift": 0.0,
+     "detected_after_shift": 0.97,
+     "median_delay": 2105.0,
+     "p90_delay": 3251.6000000000004,
+     "risk_after_without_guard": 0.07161304173222723,
+     "risk_after_with_guard": 0.03891265072676068,
+     "shadow_cost_share": 0.05745123270395469
+    },
+    {
+     "rate": 0.2,
+     "alarm_rate": 1.0,
+     "false_alarm_rate_before_shift": 0.01,
+     "detected_after_shift": 0.99,
+     "median_delay": 1396.0,
+     "p90_delay": 2028.2,
+     "risk_after_without_guard": 0.07130968030584149,
+     "risk_after_with_guard": 0.024799666758116633,
+     "shadow_cost_share": 0.08348403361743001
+    }
+   ]
+  },
+  "topic_shift": {
+   "true_risk_before": 0.012914338310739756,
+   "true_risk_after": 0.012526096033402923,
+   "cheaper_share_after": 0.13430758524704245,
+   "by_rate": [
+    {
+     "rate": 0.05,
+     "alarm_rate": 0.0,
+     "false_alarm_rate_before_shift": 0.0,
+     "detected_after_shift": 0.0,
+     "median_delay": null,
+     "p90_delay": null,
+     "risk_after_without_guard": 0.0126,
+     "risk_after_with_guard": 0.0126,
+     "shadow_cost_share": 0.01587884478180923
+    },
+    {
+     "rate": 0.1,
+     "alarm_rate": 0.0,
+     "false_alarm_rate_before_shift": 0.0,
+     "detected_after_shift": 0.0,
+     "median_delay": null,
+     "p90_delay": null,
+     "risk_after_without_guard": 0.012514999999999998,
+     "risk_after_with_guard": 0.012514999999999998,
+     "shadow_cost_share": 0.03226838920313168
+    },
+    {
+     "rate": 0.2,
+     "alarm_rate": 0.0,
+     "false_alarm_rate_before_shift": 0.0,
+     "detected_after_shift": 0.0,
+     "median_delay": null,
+     "p90_delay": null,
+     "risk_after_without_guard": 0.0127325,
+     "risk_after_with_guard": 0.0127325,
+     "shadow_cost_share": 0.06469031789112047
+    }
+   ]
+  }
+ },
+ "certificates": {
+  "all": {
+   "setting": 0.9733872699737549,
+   "index": 17,
+   "epsilon": 0.02,
+   "delta": 0.1,
+   "n_cal": 2005,
+   "empirical_risk": 0.01312549657569461,
+   "risk_ucb": 0.01898154090415389,
+   "tested": 19
+  },
+  "no_maths": {
+   "setting": 0.9627464413642883,
+   "index": 17,
+   "epsilon": 0.02,
+   "delta": 0.1,
+   "n_cal": 1646,
+   "empirical_risk": 0.012452696175794245,
+   "risk_ucb": 0.018826624541993485,
+   "tested": 19
+  }
+ }
+}
