@@ -15,8 +15,7 @@ every request to the cheapest model that can answer it, and *proves* how much qu
 </div>
 
 ```python
-pip install "thrift-llm[tiktoken]"
-
+# pip install "thrift-llm[tiktoken] @ git+https://github.com/parveen06naresh/thrift"
 from thrift_llm import Thrift
 client = Thrift("openai:gpt-5-mini", "anthropic:claude-opus-5-5")   # cheapest first, strongest last
 r = client.chat.completions.create(model="thrift-auto", messages=[{"role": "user", "content": "Why is the sky blue?"}])
@@ -93,7 +92,7 @@ to quality.
 ## Quickstart
 
 ```bash
-pip install "thrift-llm[tiktoken]"    # Python 3.10+ (from source: pip install -e ".[tiktoken]")
+pip install "thrift-llm[tiktoken] @ git+https://github.com/parveen06naresh/thrift"   # Python 3.10+, not on PyPI yet
 thrift-llm demo                       # offline: mock models, replayed traffic, live dashboard
 thrift-llm models anthropic           # the model IDs a provider serves today, with known prices
 ```
